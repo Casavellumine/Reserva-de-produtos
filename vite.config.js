@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
+import { cloudflare } from '@cloudflare/vite-plugin';
 
-// Configuração do Vite para build estático
 export default defineConfig({
+  plugins: [cloudflare()],
   build: {
     outDir: 'dist',
   },
