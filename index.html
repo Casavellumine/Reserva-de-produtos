@@ -1,0 +1,3106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Casa Vellumine — Velas Artesanais & Sistema de Reservas</title>
+  <!-- Google Fonts: Fraunces (luxo/editorial) e Jost (moderno/legível) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  
+  <!-- Tailwind CSS CDN para layout flexível e responsivo -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              bg: '#0A0F1E',
+              surface: '#111A30',
+              surface2: '#16213D',
+              surfaceCard: '#141E38',
+              border: '#26314F',
+              accent: '#C9A24C',
+              accentHover: '#DFB75E',
+              accentDark: '#8C7233',
+              accentSoft: 'rgba(201,162,76,0.14)',
+              onAccent: '#101728',
+              text: '#F3F1EA',
+              textMuted: '#A9B2C9',
+              muted: '#6E7896',
+            }
+          },
+          fontFamily: {
+            serif: ['Fraunces', 'serif'],
+            sans: ['Jost', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- React 18 & Babel Standalone para rodar direto no navegador sem necessidade de build -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Jost', sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0A0F1E;
+      color: #F3F1EA;
+      overflow-x: hidden;
+    }
+    .font-serif {
+      font-family: 'Fraunces', serif;
+    }
+    /* Estilização refinada de barra de rolagem */
+    ::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0A0F1E;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #26314F;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3A4B75;
+    }
+    input::placeholder, textarea::placeholder {
+      color: #6E7896;
+    }
+    /* Animações suaves */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="bg-brand-bg text-brand-text min-h-screen">
+  <div id="root"></div>
+
+  <!-- APLICAÇÃO REACT COMPLETA -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    /* ==========================================================================
+       CONFIGURAÇÃO DO SUPABASE & CONSTANTES
+    ========================================================================== */
+    const DEFAULT_SUPABASE_URL = "https://xecslcroytlzovcokkgx.supabase.co";
+    const DEFAULT_SUPABASE_KEY = "sb_publishable_8tWFYHqTpDvLZhavsYA5VA_9hAyRkJ6";
+    const WHATSAPP_STORE_PHONE = "5511999999999"; // WhatsApp da Casa Vellumine para receber pedidos
+
+    const STORAGE_KEYS = {
+      PRODUCTS: "vellumine:products_cache",
+      CATEGORIES: "vellumine:categories_cache",
+      RESERVATIONS: "vellumine:reservations",
+      SESSION: "vellumine:admin_session",
+      CONFIG: "vellumine:supabase_config",
+      USE_LOCAL: "vellumine:force_local_mode",
+    };
+
+    // Dados semente iniciais para catálogo garantido (100% funcional mesmo sem Supabase criado)
+    const SEED_CATEGORIES = ["Vela Aromática", "Home Spray", "Difusor de Varetas", "Wax Melts"];
+
+    const SEED_PRODUCTS = [
+      {
+        id: "p-1",
+        name: "Vela Âmbar & Baunilha Bourbon",
+        category: "Vela Aromática",
+        aroma: "Âmbar Nobre e Baunilha Bourbon",
+        size: "210g · ~40h de queima",
+        usage: "Apare o pavio a 0,5cm antes de reacender. Na primeira queima, aguarde a piscina de cera cobrir toda a superfície.",
+        price: 98.00,
+        active: true,
+        photos: [
+          "https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&w=800&q=80",
+          "https://images.unsplash.com/photo-1602874801007-bd458bb1b8b6?auto=format&fit=crop&w=800&q=80"
+        ],
+        mainPhoto: 0
+      },
+      {
+        id: "p-2",
+        name: "Vela Flor de Laranjeira & Cedro",
+        category: "Vela Aromática",
+        aroma: "Flor de Laranjeira & Cedro Virgínia",
+        size: "180g · ~35h de queima",
+        usage: "Não deixe queimar por mais de 4 horas seguidas. Mantenha em superfície plana e longe de correntes de ar.",
+        price: 89.00,
+        active: true,
+        photos: [
+          "https://images.unsplash.com/photo-1572726729207-a78d6feb18d7?auto=format&fit=crop&w=800&q=80",
+          "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=800&q=80"
+        ],
+        mainPhoto: 0
+      },
+      {
+        id: "p-3",
+        name: "Vela Lavanda Francesa & Alecrim",
+        category: "Vela Aromática",
+        aroma: "Lavanda Botânica e Alecrim Fresco",
+        size: "200g · ~38h de queima",
+        usage: "Perfeita para o quarto ou momento de relaxamento noturno. Apague tampando o recipiente sem assoprar.",
+        price: 92.00,
+        active: true,
+        photos: [
+          "https://images.unsplash.com/photo-1517404215738-15263e9f9178?auto=format&fit=crop&w=800&q=80"
+        ],
+        mainPhoto: 0
+      },
+      {
+        id: "p-4",
+        name: "Home Spray Bergamota & Chá Branco",
+        category: "Home Spray",
+        aroma: "Bergamota Italiana & Chá Branco",
+        size: "250ml frasco âmbar com gatilho",
+        usage: "Borrife a 30cm de cortinas, almofadas e mantas para prolongar a fixação da fragrância por todo o dia.",
+        price: 78.00,
+        active: true,
+        photos: [
+          "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&w=800&q=80"
+        ],
+        mainPhoto: 0
+      },
+      {
+        id: "p-5",
+        name: "Difusor de Varetas Figo & Folhas Verdes",
+        category: "Difusor de Varetas",
+        aroma: "Figo da Terra e Notas Herbais",
+        size: "200ml com 6 varetas de fibra",
+        usage: "Inverta as varetas uma vez por semana para renovar a difusão do perfume pelo cômodo.",
+        price: 115.00,
+        active: true,
+        photos: [
+          "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=800&q=80"
+        ],
+        mainPhoto: 0
+      },
+      {
+        id: "p-6",
+        name: "Wax Melts Canela & Especiarias",
+        category: "Wax Melts",
+        aroma: "Canela em Pau, Noz-Moscada & Cravo",
+        size: "6 cubos aromáticos (75g)",
+        usage: "Deposite 1 cubo no aromatizador elétrico ou rechaud cerâmico. Pode ser reutilizado várias vezes.",
+        price: 42.00,
+        active: true,
+        photos: [
+          "https://images.unsplash.com/photo-1605651202774-7d573fd3f12d?auto=format&fit=crop&w=800&q=80"
+        ],
+        mainPhoto: 0
+      }
+    ];
+
+    const uid = () => 'cv-' + Math.random().toString(36).substring(2, 9);
+
+    const formatBRL = (v) =>
+      new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
+
+    /* ==========================================================================
+       ICONES SVG EMBUTIDOS (100% autônomos sem falhas de biblioteca externa)
+    ========================================================================== */
+    function Icon({ name, size = 18, className = "" }) {
+      const icons = {
+        shoppingBag: (
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z M3 6h18 M16 10a4 4 0 0 1-8 0" />
+        ),
+        arrowLeft: <path d="m12 19-7-7 7-7 M19 12H5" />,
+        chevronLeft: <path d="m15 18-6-6 6-6" />,
+        chevronRight: <path d="m9 18 6-6-6-6" />,
+        plus: <path d="M5 12h14 M12 5v14" />,
+        minus: <path d="M5 12h14" />,
+        trash: (
+          <path d="M3 6h18 M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6 M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2 M10 11v6 M14 11v6" />
+        ),
+        check: <path d="M20 6 9 17l-5-5" />,
+        gift: (
+          <path d="M20 12v10H4V12 M2 7h20v5H2z M12 22V7 M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+        ),
+        lock: (
+          <path d="M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 10 0v4" />
+        ),
+        package: (
+          <path d="m16.5 9.4-9-5.19 M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z M3.27 6.96 12 12.01l8.73-5.05 M12 22.08V12" />
+        ),
+        users: (
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" />
+        ),
+        layoutGrid: (
+          <path d="M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z" />
+        ),
+        logOut: (
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9" />
+        ),
+        star: (
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        ),
+        pencil: (
+          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z M15 5l4 4" />
+        ),
+        x: <path d="M18 6 6 18 M6 6l12 12" />,
+        phone: (
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+        ),
+        search: <path d="m21 21-4.3-4.3 M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" />,
+        settings: (
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+        ),
+        refresh: (
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M3 21v-5h5" />
+        ),
+        download: (
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3" />
+        )
+      };
+
+      return (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={className}
+        >
+          {icons[name] || null}
+        </svg>
+      );
+    }
+
+    /* ==========================================================================
+       CAMADA DE API / SUPABASE COM FALLBACK INTELIGENTE (MODO HÍBRIDO)
+    ========================================================================== */
+    function getSupabaseConfig() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return {
+        url: DEFAULT_SUPABASE_URL,
+        key: DEFAULT_SUPABASE_KEY,
+        useLocal: localStorage.getItem(STORAGE_KEYS.USE_LOCAL) === "true",
+      };
+    }
+
+    function saveSupabaseConfig(cfg) {
+      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(cfg));
+      localStorage.setItem(STORAGE_KEYS.USE_LOCAL, cfg.useLocal ? "true" : "false");
+    }
+
+    async function supabaseRest(path, { method = "GET", body, accessToken } = {}) {
+      const cfg = getSupabaseConfig();
+      if (cfg.useLocal) {
+        throw new Error("Modo local ativo.");
+      }
+
+      const headers = {
+        apikey: cfg.key,
+        Authorization: `Bearer ${accessToken || cfg.key}`,
+        "Content-Type": "application/json",
+      };
+      if (method !== "GET") headers["Prefer"] = "return=representation";
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
+
+      try {
+        const res = await fetch(`${cfg.url}/rest/v1/${path}`, {
+          method,
+          headers,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error((data && (data.message || data.error_description)) || "Erro de conexão com o banco de dados.");
+        }
+        return data;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+      }
+    }
+
+    async function supabaseSignIn(email, password) {
+      const cfg = getSupabaseConfig();
+      if (cfg.useLocal) {
+        // Modo local: aceita qualquer email ou admin demo
+        if (email && password) {
+          return {
+            access_token: "demo_token_" + Date.now(),
+            user: { email: email },
+            expires_at: Math.floor(Date.now() / 1000) + 86400,
+          };
+        }
+      }
+
+      const res = await fetch(`${cfg.url}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: cfg.key },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error_description || data.msg || "E-mail ou senha incorretos.");
+      }
+      return data;
+    }
+
+    // Mapeamento de entidades
+    function dbToProduct(row) {
+      return {
+        id: String(row.id),
+        name: row.name,
+        category: row.category,
+        aroma: row.aroma || "",
+        size: row.size || "",
+        usage: row.usage_notes || "",
+        price: parseFloat(row.price) || 0,
+        active: row.active !== false,
+        photos: Array.isArray(row.photos) ? row.photos : (row.photos ? [row.photos] : []),
+        mainPhoto: row.main_photo || 0,
+      };
+    }
+
+    function productToDb(p) {
+      return {
+        name: p.name,
+        category: p.category,
+        aroma: p.aroma,
+        size: p.size,
+        usage_notes: p.usage,
+        price: p.price,
+        active: p.active,
+        photos: p.photos,
+        main_photo: p.mainPhoto,
+      };
+    }
+
+    function dbToReservation(row) {
+      return {
+        id: String(row.id),
+        name: row.customer_name,
+        whatsapp: row.customer_whatsapp,
+        items: row.items || [],
+        total: parseFloat(row.total) || 0,
+        giftWrap: row.gift_wrap === true,
+        packages: row.packages || [],
+        status: row.status || "pendente",
+        notes: row.notes || "",
+        createdAt: row.created_at || new Date().toISOString(),
+      };
+    }
+
+    function reservationToDb(r) {
+      return {
+        customer_name: r.name,
+        customer_whatsapp: r.whatsapp,
+        items: r.items,
+        total: r.total,
+        gift_wrap: r.giftWrap,
+        packages: r.packages,
+        status: r.status || "pendente",
+        notes: r.notes || "",
+      };
+    }
+
+    /* ==========================================================================
+       SISTEMA DE NOTIFICAÇÕES TOAST
+    ========================================================================== */
+    function ToastContainer({ toasts, removeToast }) {
+      return (
+        <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full px-4">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`pointer-events-auto p-4 rounded border shadow-xl flex items-start gap-3 animate-fade-in ${
+                t.type === "error"
+                  ? "bg-red-950/90 border-red-800 text-red-100"
+                  : t.type === "success"
+                  ? "bg-emerald-950/90 border-emerald-800 text-emerald-100"
+                  : "bg-brand-surface2/95 border-brand-accent text-brand-text"
+              }`}
+            >
+              <div className="mt-0.5">
+                {t.type === "error" ? (
+                  <span className="text-red-400 font-bold">!</span>
+                ) : (
+                  <Icon name="check" size={16} className="text-brand-accent" />
+                )}
+              </div>
+              <div className="flex-1 text-sm font-medium">{t.message}</div>
+              <button
+                onClick={() => removeToast(t.id)}
+                className="text-brand-muted hover:text-white"
+              >
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       COMPONENTE PRINCIPAL — CASA VELLUMINE APP
+    ========================================================================== */
+    function CasaVellumineApp() {
+      // Estado de Visualização
+      const [view, setView] = useState("home"); 
+      // 'home' | 'products' | 'cart' | 'giftwrap' | 'packages' | 'customer' | 'confirmation' | 'adminLogin' | 'admin'
+
+      // Estado de Dados
+      const [products, setProducts] = useState([]);
+      const [categories, setCategories] = useState([]);
+      const [isUsingLocalData, setIsUsingLocalData] = useState(false);
+      const [catalogLoading, setCatalogLoading] = useState(true);
+
+      // Estado de Compra
+      const [cart, setCart] = useState([]); // [{ productId, qty }]
+      const [giftWrap, setGiftWrap] = useState(null); // null | true | false
+      const [packages, setPackages] = useState([]); // [{ id, items: { productId: qty } }]
+      const [customerName, setCustomerName] = useState("");
+      const [customerWhatsapp, setCustomerWhatsapp] = useState("");
+      const [customerNotes, setCustomerNotes] = useState("");
+      const [lastReservation, setLastReservation] = useState(null);
+      const [confirmLoading, setConfirmLoading] = useState(false);
+
+      // Estado do Administrador
+      const [session, setSession] = useState(null);
+      const [adminTab, setAdminTab] = useState("dashboard");
+      const [reservations, setReservations] = useState([]);
+      const [reservationsLoading, setReservationsLoading] = useState(false);
+      const [statusFilter, setStatusFilter] = useState("todos");
+      const [adminSearch, setAdminSearch] = useState("");
+
+      // Formulário de Produto
+      const [editingProduct, setEditingProduct] = useState(null);
+      const [productDraft, setProductDraft] = useState({
+        name: "",
+        category: "Vela Aromática",
+        aroma: "",
+        size: "",
+        usage: "",
+        price: "",
+        active: true,
+        photos: [],
+        mainPhoto: 0,
+      });
+      const [photoUrlInput, setPhotoUrlInput] = useState("");
+      const [newCategoryInput, setNewCategoryInput] = useState("");
+
+      // Toasts
+      const [toasts, setToasts] = useState([]);
+      const addToast = (message, type = "info") => {
+        const id = uid();
+        setToasts((prev) => [...prev, { id, message, type }]);
+        setTimeout(() => removeToast(id), 4200);
+      };
+      const removeToast = (id) => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      };
+
+      /* -------------------------------------------------------------
+         CARREGAMENTO INICIAL DO CATÁLOGO
+      ------------------------------------------------------------- */
+      async function loadCatalog() {
+        setCatalogLoading(true);
+        const cfg = getSupabaseConfig();
+
+        if (cfg.useLocal) {
+          useLocalCatalog();
+          setCatalogLoading(false);
+          return;
+        }
+
+        try {
+          const [prodRows, catRows] = await Promise.all([
+            supabaseRest("products?select=*&order=created_at.asc"),
+            supabaseRest("categories?select=name&order=created_at.asc"),
+          ]);
+          if (prodRows && prodRows.length > 0) {
+            setProducts(prodRows.map(dbToProduct));
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(prodRows.map(dbToProduct)));
+          } else {
+            useLocalCatalog();
+          }
+
+          if (catRows && catRows.length > 0) {
+            setCategories(catRows.map((c) => c.name));
+            localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(catRows.map((c) => c.name)));
+          } else {
+            setCategories(SEED_CATEGORIES);
+          }
+          setIsUsingLocalData(false);
+        } catch (err) {
+          console.warn("Supabase indisponível no momento, usando modo local/cache:", err.message);
+          useLocalCatalog();
+          setIsUsingLocalData(true);
+        } finally {
+          setCatalogLoading(false);
+        }
+      }
+
+      function useLocalCatalog() {
+        const cachedProd = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+        const cachedCat = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+
+        if (cachedProd) {
+          setProducts(JSON.parse(cachedProd));
+        } else {
+          setProducts(SEED_PRODUCTS);
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(SEED_PRODUCTS));
+        }
+
+        if (cachedCat) {
+          setCategories(JSON.parse(cachedCat));
+        } else {
+          setCategories(SEED_CATEGORIES);
+          localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(SEED_CATEGORIES));
+        }
+      }
+
+      // Restaura sessão do Administrador
+      useEffect(() => {
+        loadCatalog();
+        try {
+          const savedSession = localStorage.getItem(STORAGE_KEYS.SESSION);
+          if (savedSession) {
+            const parsed = JSON.parse(savedSession);
+            if (parsed.expires_at && parsed.expires_at * 1000 > Date.now()) {
+              setSession(parsed);
+            } else {
+              localStorage.removeItem(STORAGE_KEYS.SESSION);
+            }
+          }
+        } catch (e) {}
+      }, []);
+
+      // Carrega reservas quando autenticado como admin
+      async function loadReservations() {
+        setReservationsLoading(true);
+        const cfg = getSupabaseConfig();
+        if (cfg.useLocal || isUsingLocalData) {
+          const localRes = localStorage.getItem(STORAGE_KEYS.RESERVATIONS);
+          setReservations(localRes ? JSON.parse(localRes) : []);
+          setReservationsLoading(false);
+          return;
+        }
+
+        try {
+          const rows = await supabaseRest("reservations?select=*&order=created_at.desc", {
+            accessToken: session?.access_token,
+          });
+          setReservations(rows.map(dbToReservation));
+        } catch (err) {
+          // Fallback para reservas salvas no localStorage
+          const localRes = localStorage.getItem(STORAGE_KEYS.RESERVATIONS);
+          setReservations(localRes ? JSON.parse(localRes) : []);
+        } finally {
+          setReservationsLoading(false);
+        }
+      }
+
+      useEffect(() => {
+        if (session) {
+          loadReservations();
+        }
+      }, [session, isUsingLocalData]);
+
+      /* -------------------------------------------------------------
+         CARRINHO E CÁLCULOS
+      ------------------------------------------------------------- */
+      const activeProducts = useMemo(() => products.filter((p) => p.active), [products]);
+      const productById = (id) => products.find((p) => p.id === id);
+
+      const cartLines = useMemo(() => {
+        return cart
+          .map((c) => ({ ...c, product: productById(c.productId) }))
+          .filter((c) => c.product);
+      }, [cart, products]);
+
+      const totalItems = useMemo(() => cartLines.reduce((s, c) => s + c.qty, 0), [cartLines]);
+      const totalValue = useMemo(
+        () => cartLines.reduce((s, c) => s + c.qty * c.product.price, 0),
+        [cartLines]
+      );
+
+      function addToCart(productId) {
+        setCart((prev) => {
+          const found = prev.find((c) => c.productId === productId);
+          if (found) {
+            return prev.map((c) => (c.productId === productId ? { ...c, qty: c.qty + 1 } : c));
+          }
+          return [...prev, { productId, qty: 1 }];
+        });
+        const p = productById(productId);
+        addToast(`Adicionado: ${p ? p.name : "Produto"}`, "success");
+      }
+
+      function changeQty(productId, delta) {
+        setCart((prev) =>
+          prev
+            .map((c) => (c.productId === productId ? { ...c, qty: c.qty + delta } : c))
+            .filter((c) => c.qty > 0)
+        );
+      }
+
+      function removeFromCart(productId) {
+        setCart((prev) => prev.filter((c) => c.productId !== productId));
+      }
+
+      /* -------------------------------------------------------------
+         LÓGICA DE EMBALAGENS DE PRESENTE
+      ------------------------------------------------------------- */
+      function allocatedFor(productId) {
+        return packages.reduce((s, pkg) => s + (pkg.items[productId] || 0), 0);
+      }
+
+      function remainingFor(productId, cartQty) {
+        return cartQty - allocatedFor(productId);
+      }
+
+      const totalUsedInPackages = useMemo(() => {
+        return packages.reduce(
+          (s, pkg) => s + Object.values(pkg.items).reduce((a, b) => a + b, 0),
+          0
+        );
+      }, [packages]);
+
+      function addPackage() {
+        if (packages.length >= totalItems) return;
+        setPackages((prev) => [...prev, { id: uid(), items: {} }]);
+      }
+
+      function removePackage(pkgId) {
+        setPackages((prev) => prev.filter((p) => p.id !== pkgId));
+      }
+
+      function adjustPackageItem(pkgId, productId, delta, cartQty) {
+        setPackages((prev) =>
+          prev.map((pkg) => {
+            if (pkg.id !== pkgId) return pkg;
+            const current = pkg.items[productId] || 0;
+            const next = current + delta;
+            if (next < 0) return pkg;
+            if (delta > 0 && remainingFor(productId, cartQty) <= 0) return pkg;
+            const items = { ...pkg.items, [productId]: next };
+            if (next === 0) delete items[productId];
+            return { ...pkg, items };
+          })
+        );
+      }
+
+      /* -------------------------------------------------------------
+         FINALIZAÇÃO DA RESERVA
+      ------------------------------------------------------------- */
+      async function confirmReservation() {
+        if (!customerName.trim() || !customerWhatsapp.trim()) {
+          addToast("Por favor, preencha seu nome e WhatsApp.", "error");
+          return;
+        }
+
+        const items = cartLines.map((c) => ({
+          productId: c.product.id,
+          name: c.product.name,
+          category: c.product.category,
+          aroma: c.product.aroma,
+          size: c.product.size,
+          price: c.product.price,
+          qty: c.qty,
+        }));
+
+        const cleanPackages =
+          giftWrap === true
+            ? packages
+                .filter((p) => Object.keys(p.items).length > 0)
+                .map((p) => ({
+                  id: p.id,
+                  items: Object.entries(p.items).map(([pId, qty]) => ({
+                    productId: pId,
+                    name: productById(pId)?.name || "Produto",
+                    qty,
+                  })),
+                }))
+            : [];
+
+        const reservation = {
+          id: uid(),
+          name: customerName.trim(),
+          whatsapp: customerWhatsapp.trim(),
+          items,
+          total: totalValue,
+          giftWrap: giftWrap === true,
+          packages: cleanPackages,
+          notes: customerNotes.trim(),
+          status: "pendente",
+          createdAt: new Date().toISOString(),
+        };
+
+        setConfirmLoading(true);
+
+        try {
+          const cfg = getSupabaseConfig();
+          if (!cfg.useLocal && !isUsingLocalData) {
+            const rows = await supabaseRest("reservations", {
+              method: "POST",
+              body: [reservationToDb(reservation)],
+            });
+            if (rows && rows[0]) {
+              reservation.id = String(rows[0].id);
+            }
+          }
+        } catch (err) {
+          console.warn("Salvando reserva no armazenamento local:", err.message);
+        }
+
+        // Salva cópia localmente sempre
+        const existingLocal = JSON.parse(localStorage.getItem(STORAGE_KEYS.RESERVATIONS) || "[]");
+        localStorage.setItem(
+          STORAGE_KEYS.RESERVATIONS,
+          JSON.stringify([reservation, ...existingLocal])
+        );
+
+        setLastReservation(reservation);
+        setView("confirmation");
+        setConfirmLoading(false);
+      }
+
+      function resetFlow() {
+        setCart([]);
+        setGiftWrap(null);
+        setPackages([]);
+        setCustomerName("");
+        setCustomerWhatsapp("");
+        setCustomerNotes("");
+        setLastReservation(null);
+        setView("home");
+      }
+
+      /* -------------------------------------------------------------
+         ADMINISTRAÇÃO DE PRODUTOS E STATUS
+      ------------------------------------------------------------- */
+      async function handleSaveProduct() {
+        if (!productDraft.name.trim() || !productDraft.price) {
+          addToast("Informe o nome e o preço do produto.", "error");
+          return;
+        }
+
+        const priceNum = parseFloat(String(productDraft.price).replace(",", ".")) || 0;
+        const toSave = {
+          ...productDraft,
+          price: priceNum,
+          photos:
+            productDraft.photos.length > 0
+              ? productDraft.photos
+              : ["https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&w=800&q=80"],
+        };
+
+        try {
+          if (editingProduct) {
+            // Atualizar
+            setProducts((prev) =>
+              prev.map((p) => (p.id === editingProduct.id ? { ...toSave, id: editingProduct.id } : p))
+            );
+            if (!isUsingLocalData) {
+              await supabaseRest(`products?id=eq.${editingProduct.id}`, {
+                method: "PATCH",
+                body: productToDb(toSave),
+                accessToken: session?.access_token,
+              });
+            }
+            addToast("Produto atualizado com sucesso!", "success");
+          } else {
+            // Criar
+            const newProd = { ...toSave, id: uid() };
+            setProducts((prev) => [newProd, ...prev]);
+            if (!isUsingLocalData) {
+              const rows = await supabaseRest("products", {
+                method: "POST",
+                body: [productToDb(toSave)],
+                accessToken: session?.access_token,
+              });
+              if (rows && rows[0]) {
+                newProd.id = String(rows[0].id);
+              }
+            }
+            addToast("Novo produto cadastrado!", "success");
+          }
+
+          // Atualiza localStorage
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+          setEditingProduct(null);
+          setAdminTab("products");
+        } catch (err) {
+          addToast("Aviso: Salvo no armazenamento local deste dispositivo.", "info");
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+          setEditingProduct(null);
+          setAdminTab("products");
+        }
+      }
+
+      async function handleDeleteProduct(id) {
+        if (!confirm("Deseja realmente remover este produto?")) return;
+        setProducts((prev) => prev.filter((p) => p.id !== id));
+        localStorage.setItem(
+          STORAGE_KEYS.PRODUCTS,
+          JSON.stringify(products.filter((p) => p.id !== id))
+        );
+        try {
+          if (!isUsingLocalData) {
+            await supabaseRest(`products?id=eq.${id}`, {
+              method: "DELETE",
+              accessToken: session?.access_token,
+            });
+          }
+          addToast("Produto removido.", "info");
+        } catch (e) {}
+      }
+
+      async function handleToggleProductActive(id) {
+        const prod = products.find((p) => p.id === id);
+        if (!prod) return;
+        const nextActive = !prod.active;
+        setProducts((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, active: nextActive } : p))
+        );
+        localStorage.setItem(
+          STORAGE_KEYS.PRODUCTS,
+          JSON.stringify(products.map((p) => (p.id === id ? { ...p, active: nextActive } : p)))
+        );
+
+        try {
+          if (!isUsingLocalData) {
+            await supabaseRest(`products?id=eq.${id}`, {
+              method: "PATCH",
+              body: { active: nextActive },
+              accessToken: session?.access_token,
+            });
+          }
+        } catch (e) {}
+      }
+
+      async function handleUpdateReservationStatus(id, newStatus) {
+        setReservations((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
+        );
+        const local = JSON.parse(localStorage.getItem(STORAGE_KEYS.RESERVATIONS) || "[]");
+        localStorage.setItem(
+          STORAGE_KEYS.RESERVATIONS,
+          JSON.stringify(local.map((r) => (r.id === id ? { ...r, status: newStatus } : r)))
+        );
+        addToast(`Status alterado para "${newStatus}".`, "success");
+
+        try {
+          if (!isUsingLocalData) {
+            await supabaseRest(`reservations?id=eq.${id}`, {
+              method: "PATCH",
+              body: { status: newStatus },
+              accessToken: session?.access_token,
+            });
+          }
+        } catch (e) {}
+      }
+
+      function handleAddCategory() {
+        const cat = newCategoryInput.trim();
+        if (!cat || categories.includes(cat)) return;
+        const updated = [...categories, cat];
+        setCategories(updated);
+        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(updated));
+        setProductDraft((d) => ({ ...d, category: cat }));
+        setNewCategoryInput("");
+        addToast(`Categoria "${cat}" criada.`, "success");
+      }
+
+      /* -------------------------------------------------------------
+         AGREGAÇÕES DO PAINEL DE CONTROLE
+      ------------------------------------------------------------- */
+      const uniqueCustomerCount = useMemo(() => {
+        return new Set(reservations.map((r) => r.whatsapp)).size;
+      }, [reservations]);
+
+      const totalItemsReservedCount = useMemo(() => {
+        return reservations.reduce(
+          (sum, r) => sum + r.items.reduce((acc, it) => acc + (it.qty || 1), 0),
+          0
+        );
+      }, [reservations]);
+
+      const totalRevenueReserved = useMemo(() => {
+        return reservations.reduce((sum, r) => sum + (r.total || 0), 0);
+      }, [reservations]);
+
+      const itemAggregation = useMemo(() => {
+        const map = {};
+        reservations.forEach((r) => {
+          if (r.status !== "cancelada") {
+            r.items.forEach((it) => {
+              const key = it.productId || it.name;
+              if (!map[key]) {
+                map[key] = {
+                  productId: it.productId,
+                  name: it.name,
+                  aroma: it.aroma || "",
+                  size: it.size || "",
+                  qty: 0,
+                  total: 0,
+                };
+              }
+              map[key].qty += it.qty || 1;
+              map[key].total += (it.price || 0) * (it.qty || 1);
+            });
+          }
+        });
+        return Object.values(map).sort((a, b) => b.qty - a.qty);
+      }, [reservations]);
+
+      /* -------------------------------------------------------------
+         EXPORTAR RESERVAS EM CSV
+      ------------------------------------------------------------- */
+      function exportToCSV() {
+        if (reservations.length === 0) {
+          addToast("Nenhuma reserva para exportar.", "info");
+          return;
+        }
+        let csv = "ID,Data,Cliente,WhatsApp,Total (R$),Status,Embalagem Presente,Itens\n";
+        reservations.forEach((r) => {
+          const itemsStr = r.items.map((i) => `${i.qty}x ${i.name}`).join("; ");
+          const row = [
+            `"${r.id}"`,
+            `"${new Date(r.createdAt).toLocaleDateString("pt-BR")}"`,
+            `"${r.name.replace(/"/g, '""')}"`,
+            `"${r.whatsapp}"`,
+            `"${r.total.toFixed(2)}"`,
+            `"${r.status}"`,
+            `"${r.giftWrap ? "Sim" : "Nao"}"`,
+            `"${itemsStr.replace(/"/g, '""')}"`,
+          ];
+          csv += row.join(",") + "\n";
+        });
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `reservas-casa-vellumine-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        addToast("Arquivo CSV gerado com sucesso!", "success");
+      }
+
+      return (
+        <div className="min-h-screen flex flex-col bg-brand-bg text-brand-text">
+          {/* TOASTS */}
+          <ToastContainer toasts={toasts} removeToast={removeToast} />
+
+          {/* FLUXO DO CLIENTE */}
+          {view === "home" && (
+            <HomeScreen
+              onStart={() => setView("products")}
+              onAdmin={() => setView(session ? "admin" : "adminLogin")}
+              totalProducts={activeProducts.length}
+            />
+          )}
+
+          {view === "products" && (
+            <ProductsScreen
+              products={activeProducts}
+              categories={categories}
+              cart={cart}
+              totalItems={totalItems}
+              totalValue={totalValue}
+              onAddToCart={addToCart}
+              onBack={() => setView("home")}
+              onGoCart={() => setView("cart")}
+              onAdmin={() => setView(session ? "admin" : "adminLogin")}
+              isUsingLocalData={isUsingLocalData}
+            />
+          )}
+
+          {view === "cart" && (
+            <CartScreen
+              cartLines={cartLines}
+              totalValue={totalValue}
+              onChangeQty={changeQty}
+              onRemove={removeFromCart}
+              onBack={() => setView("products")}
+              onContinue={() => setView("giftwrap")}
+            />
+          )}
+
+          {view === "giftwrap" && (
+            <GiftWrapScreen
+              onYes={() => {
+                setGiftWrap(true);
+                setPackages([{ id: uid(), items: {} }]);
+                setView("packages");
+              }}
+              onNo={() => {
+                setGiftWrap(false);
+                setPackages([]);
+                setView("customer");
+              }}
+              onBack={() => setView("cart")}
+            />
+          )}
+
+          {view === "packages" && (
+            <PackagesScreen
+              cartLines={cartLines}
+              packages={packages}
+              totalItems={totalItems}
+              totalUsed={totalUsedInPackages}
+              onAddPackage={addPackage}
+              onRemovePackage={removePackage}
+              onAdjust={adjustPackageItem}
+              remainingFor={remainingFor}
+              onBack={() => setView("giftwrap")}
+              onContinue={() => setView("customer")}
+            />
+          )}
+
+          {view === "customer" && (
+            <CustomerScreen
+              name={customerName}
+              setName={setCustomerName}
+              whatsapp={customerWhatsapp}
+              setWhatsapp={setCustomerWhatsapp}
+              notes={customerNotes}
+              setNotes={setCustomerNotes}
+              totalValue={totalValue}
+              totalItems={totalItems}
+              giftWrap={giftWrap}
+              packagesCount={packages.length}
+              onBack={() => setView(giftWrap ? "packages" : "giftwrap")}
+              onConfirm={confirmReservation}
+              loading={confirmLoading}
+            />
+          )}
+
+          {view === "confirmation" && lastReservation && (
+            <ConfirmationScreen
+              reservation={lastReservation}
+              onHome={resetFlow}
+            />
+          )}
+
+          {/* FLUXO DO ADMINISTRADOR */}
+          {view === "adminLogin" && !session && (
+            <AdminLoginScreen
+              onSuccess={(userSession) => {
+                setSession(userSession);
+                localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(userSession));
+                setView("admin");
+                addToast("Login realizado com sucesso!", "success");
+              }}
+              onBack={() => setView("home")}
+              onUseDemo={() => {
+                const demoSession = {
+                  access_token: "demo_token_" + Date.now(),
+                  user: { email: "admin@casavellumine.com" },
+                  expires_at: Math.floor(Date.now() / 1000) + 86400,
+                };
+                setSession(demoSession);
+                localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(demoSession));
+                setView("admin");
+                addToast("Conectado no Modo Administrador Demo!", "info");
+              }}
+            />
+          )}
+
+          {view === "admin" && session && (
+            <AdminPanel
+              session={session}
+              adminTab={adminTab}
+              setAdminTab={setAdminTab}
+              products={products}
+              categories={categories}
+              reservations={reservations}
+              reservationsLoading={reservationsLoading}
+              uniqueCustomerCount={uniqueCustomerCount}
+              totalItemsReservedCount={totalItemsReservedCount}
+              totalRevenueReserved={totalRevenueReserved}
+              itemAggregation={itemAggregation}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              adminSearch={adminSearch}
+              setAdminSearch={setAdminSearch}
+              onUpdateStatus={handleUpdateReservationStatus}
+              onDeleteProduct={handleDeleteProduct}
+              onToggleProductActive={handleToggleProductActive}
+              onStartNewProduct={() => {
+                setEditingProduct(null);
+                setProductDraft({
+                  name: "",
+                  category: categories[0] || "Vela Aromática",
+                  aroma: "",
+                  size: "",
+                  usage: "",
+                  price: "",
+                  active: true,
+                  photos: [],
+                  mainPhoto: 0,
+                });
+                setAdminTab("productForm");
+              }}
+              onEditProduct={(p) => {
+                setEditingProduct(p);
+                setProductDraft({ ...p, price: String(p.price) });
+                setAdminTab("productForm");
+              }}
+              productDraft={productDraft}
+              setProductDraft={setProductDraft}
+              photoUrlInput={photoUrlInput}
+              setPhotoUrlInput={setPhotoUrlInput}
+              newCategoryInput={newCategoryInput}
+              setNewCategoryInput={setNewCategoryInput}
+              onAddCategory={handleAddCategory}
+              onSaveProduct={handleSaveProduct}
+              onCancelProductForm={() => setAdminTab("products")}
+              onExportCSV={exportToCSV}
+              onRefreshReservations={loadReservations}
+              onLogout={() => {
+                setSession(null);
+                localStorage.removeItem(STORAGE_KEYS.SESSION);
+                setView("home");
+                addToast("Sessão encerrada.", "info");
+              }}
+              onBackHome={() => setView("home")}
+              isUsingLocalData={isUsingLocalData}
+              setIsUsingLocalData={setIsUsingLocalData}
+              addToast={addToast}
+            />
+          )}
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       TELA INICIAL (HOME)
+    ========================================================================== */
+    function HomeScreen({ onStart, onAdmin, totalProducts }) {
+      return (
+        <div className="relative min-h-screen flex flex-col justify-between p-6 sm:p-12 overflow-hidden">
+          {/* Fundo com gradiente sutil */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand-surface via-brand-bg to-brand-bg opacity-90 pointer-events-none" />
+          
+          {/* Barra superior */}
+          <div className="relative z-10 flex justify-between items-center max-w-6xl mx-auto w-full">
+            <div className="flex items-center gap-3">
+              <span className="w-8 h-[2px] bg-brand-accent inline-block"></span>
+              <span className="font-serif italic text-brand-accent tracking-wider text-sm sm:text-base">
+                Maison de Parfum
+              </span>
+            </div>
+            <button
+              onClick={onAdmin}
+              className="text-xs sm:text-sm text-brand-textMuted hover:text-brand-accent flex items-center gap-2 border border-brand-border px-3.5 py-1.5 rounded transition-colors"
+            >
+              <Icon name="lock" size={14} />
+              Área do Lojista
+            </button>
+          </div>
+
+          {/* Centro / Apresentação */}
+          <div className="relative z-10 max-w-2xl mx-auto text-center my-auto py-12">
+            <div className="w-12 h-[2px] bg-brand-accent mx-auto mb-6"></div>
+            <h1 className="font-serif text-4xl sm:text-6xl text-brand-text font-normal tracking-tight leading-[1.1] mb-6">
+              Casa Vellumine
+            </h1>
+            <p className="text-brand-textMuted text-base sm:text-lg font-light leading-relaxed mb-10 max-w-lg mx-auto">
+              Velas botânicas e fragrâncias artesanais em cera de coco pura. Escolha seus aromas preferidos, personalize embalagens para presente e reserve para retirada.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <button
+                onClick={onStart}
+                className="w-full sm:w-auto bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold px-8 py-4 rounded text-base transition-all shadow-lg hover:shadow-brand-accent/20 flex items-center justify-center gap-3"
+              >
+                <span>Fazer Minha Reserva</span>
+                <Icon name="shoppingBag" size={18} />
+              </button>
+            </div>
+            {totalProducts > 0 && (
+              <div className="mt-8 text-xs text-brand-muted uppercase tracking-widest">
+                {totalProducts} criações artesanais disponíveis
+              </div>
+            )}
+          </div>
+
+          {/* Rodapé institucional */}
+          <div className="relative z-10 text-center text-xs text-brand-muted max-w-6xl mx-auto w-full pt-8 border-t border-brand-border/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <span>© {new Date().getFullYear()} Casa Vellumine Aromas Artesanais.</span>
+            <span>Feito à mão com cera vegetal e essências nobres.</span>
+          </div>
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       GALERIA DE FOTOS INTERATIVA DO PRODUTO
+    ========================================================================== */
+    function ProductImageGallery({ photos, name }) {
+      const [curr, setCurr] = useState(0);
+      const list = photos && photos.length > 0 ? photos : [];
+
+      if (list.length === 0) {
+        return (
+          <div className="w-full aspect-square bg-brand-surface2 flex items-center justify-center text-brand-muted">
+            <Icon name="package" size={36} />
+          </div>
+        );
+      }
+
+      return (
+        <div className="relative w-full aspect-square bg-brand-surface2 overflow-hidden group">
+          <img
+            src={list[curr]}
+            alt={name}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+
+          {list.length > 1 && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurr((c) => (c - 1 + list.length) % list.length);
+                }}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-full backdrop-blur transition-opacity opacity-80 hover:opacity-100"
+                aria-label="Foto anterior"
+              >
+                <Icon name="chevronLeft" size={16} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurr((c) => (c + 1) % list.length);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-full backdrop-blur transition-opacity opacity-80 hover:opacity-100"
+                aria-label="Próxima foto"
+              >
+                <Icon name="chevronRight" size={16} />
+              </button>
+
+              <div className="absolute bottom-2.5 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
+                {list.map((_, i) => (
+                  <span
+                    key={i}
+                    className={`w-1.5 h-1.5 rounded-full transition-all ${
+                      i === curr ? "bg-brand-accent w-4" : "bg-white/40"
+                    }`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       TELA DO CATÁLOGO DE PRODUTOS
+    ========================================================================== */
+    function ProductsScreen({
+      products,
+      categories,
+      cart,
+      totalItems,
+      totalValue,
+      onAddToCart,
+      onBack,
+      onGoCart,
+      onAdmin,
+      isUsingLocalData,
+    }) {
+      const [selectedCat, setSelectedCat] = useState("Todas");
+      const [searchTerm, setSearchTerm] = useState("");
+
+      const filtered = useMemo(() => {
+        return products.filter((p) => {
+          const matchCat = selectedCat === "Todas" || p.category === selectedCat;
+          const matchSearch =
+            !searchTerm.trim() ||
+            p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (p.aroma && p.aroma.toLowerCase().includes(searchTerm.toLowerCase()));
+          return matchCat && matchSearch;
+        });
+      }, [products, selectedCat, searchTerm]);
+
+      return (
+        <div className="min-h-screen flex flex-col pb-28">
+          {/* Top Bar */}
+          <header className="sticky top-0 z-30 bg-brand-bg/95 backdrop-blur border-b border-brand-border px-4 sm:px-8 py-3.5 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onBack}
+                className="p-1.5 hover:bg-brand-surface2 rounded text-brand-textMuted hover:text-white"
+                title="Voltar ao início"
+              >
+                <Icon name="arrowLeft" size={20} />
+              </button>
+              <h2 className="font-serif italic text-xl sm:text-2xl text-brand-text">
+                Catálogo de Aromas
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onGoCart}
+                className="relative p-2.5 bg-brand-surface2 border border-brand-border hover:border-brand-accent rounded text-brand-text transition-colors flex items-center gap-2"
+                aria-label="Carrinho"
+              >
+                <Icon name="shoppingBag" size={18} />
+                <span className="hidden sm:inline text-xs font-medium">Carrinho</span>
+                {totalItems > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-brand-accent text-brand-onAccent text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                    {totalItems}
+                  </span>
+                )}
+              </button>
+            </div>
+          </header>
+
+          {/* Banner informativo de modo local / conexão */}
+          {isUsingLocalData && (
+            <div className="bg-amber-950/40 border-b border-amber-800/60 px-4 py-2 text-center text-xs text-amber-200">
+              Catálogo em modo demonstração local. Todas as reservas serão salvas neste navegador.
+            </div>
+          )}
+
+          {/* Filtros e Busca */}
+          <div className="max-w-6xl mx-auto w-full px-4 sm:px-8 pt-6">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+              {/* Categorias */}
+              <div className="flex gap-2 overflow-x-auto w-full pb-2 no-scrollbar">
+                {["Todas", ...categories].map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setSelectedCat(c)}
+                    className={`px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all border ${
+                      selectedCat === c
+                        ? "bg-brand-surface2 border-brand-accent text-brand-accent shadow"
+                        : "border-brand-border text-brand-textMuted hover:border-brand-muted"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+
+              {/* Barra de Pesquisa */}
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar vela, aroma..."
+                  className="w-full bg-brand-surface border border-brand-border rounded px-3.5 py-1.5 pl-9 text-sm text-brand-text focus:border-brand-accent outline-none"
+                />
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-muted">
+                  <Icon name="search" size={15} />
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Grade de Produtos */}
+          <main className="max-w-6xl mx-auto w-full px-4 sm:px-8 mt-6">
+            {filtered.length === 0 ? (
+              <div className="text-center py-20 text-brand-muted">
+                <Icon name="package" size={42} className="mx-auto mb-3 opacity-40" />
+                <p>Nenhum produto encontrado nesta categoria.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filtered.map((p) => {
+                  const inCartQty = cart.find((c) => c.productId === p.id)?.qty || 0;
+                  return (
+                    <div
+                      key={p.id}
+                      className="bg-brand-surface border border-brand-border hover:border-brand-border/90 rounded overflow-hidden flex flex-col transition-shadow hover:shadow-xl hover:shadow-black/40"
+                    >
+                      <ProductImageGallery photos={p.photos} name={p.name} />
+
+                      <div className="p-5 flex flex-col flex-1">
+                        <div className="text-[11px] uppercase tracking-wider text-brand-accent font-semibold mb-1">
+                          {p.category}
+                        </div>
+                        <h3 className="font-serif text-xl font-medium text-brand-text mb-1">
+                          {p.name}
+                        </h3>
+                        <div className="text-xs text-brand-textMuted mb-2">
+                          {p.aroma} {p.size ? `· ${p.size}` : ""}
+                        </div>
+
+                        {p.usage && (
+                          <p className="text-xs text-brand-muted leading-relaxed mb-4 flex-1">
+                            {p.usage}
+                          </p>
+                        )}
+
+                        <div className="pt-4 border-t border-brand-border/60 flex items-center justify-between mt-auto">
+                          <div className="font-serif text-lg font-semibold text-brand-text">
+                            {formatBRL(p.price)}
+                          </div>
+                          <button
+                            onClick={() => onAddToCart(p.id)}
+                            className={`px-4 py-2 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                              inCartQty > 0
+                                ? "bg-brand-surface2 border border-brand-accent text-brand-accent"
+                                : "bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent"
+                            }`}
+                          >
+                            <Icon name="plus" size={14} />
+                            {inCartQty > 0 ? `Adicionado (${inCartQty})` : "Reservar"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </main>
+
+          {/* Barra Flutuante de Resumo do Carrinho */}
+          {totalItems > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 z-40 bg-brand-surface2/95 backdrop-blur border-t border-brand-border px-6 py-4 shadow-2xl animate-fade-in">
+              <div className="max-w-6xl mx-auto flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-brand-textMuted uppercase tracking-wider block">
+                    Resumo do Pedido
+                  </span>
+                  <span className="text-base font-semibold text-brand-text">
+                    {totalItems} {totalItems === 1 ? "peça" : "peças"} ·{" "}
+                    <span className="text-brand-accent font-serif">{formatBRL(totalValue)}</span>
+                  </span>
+                </div>
+                <button
+                  onClick={onGoCart}
+                  className="bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold px-6 py-2.5 rounded text-sm transition-all flex items-center gap-2"
+                >
+                  <span>Avançar para o Carrinho</span>
+                  <Icon name="chevronRight" size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       TELA DO CARRINHO
+    ========================================================================== */
+    function CartScreen({ cartLines, totalValue, onChangeQty, onRemove, onBack, onContinue }) {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <header className="sticky top-0 z-30 bg-brand-bg border-b border-brand-border px-6 py-4 flex items-center gap-4">
+            <button
+              onClick={onBack}
+              className="p-1 hover:bg-brand-surface2 rounded text-brand-textMuted hover:text-white"
+            >
+              <Icon name="arrowLeft" size={20} />
+            </button>
+            <h2 className="font-serif italic text-2xl text-brand-text">Seu Carrinho</h2>
+          </header>
+
+          <main className="max-w-xl mx-auto w-full p-6 flex-1 flex flex-col justify-between">
+            {cartLines.length === 0 ? (
+              <div className="text-center py-24 my-auto">
+                <Icon name="shoppingBag" size={48} className="mx-auto text-brand-muted mb-4 opacity-50" />
+                <h3 className="font-serif text-xl text-brand-text mb-2">Seu carrinho está vazio</h3>
+                <p className="text-sm text-brand-textMuted mb-6">
+                  Conheça nossa seleção de velas e adicione suas fragrâncias favoritas.
+                </p>
+                <button
+                  onClick={onBack}
+                  className="bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold px-6 py-3 rounded text-sm"
+                >
+                  Voltar ao Catálogo
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="divide-y divide-brand-border/60 border-y border-brand-border/60 mb-6">
+                  {cartLines.map((line) => (
+                    <div key={line.productId} className="py-4 flex items-center gap-4">
+                      <img
+                        src={line.product.photos[0] || ""}
+                        alt={line.product.name}
+                        className="w-16 h-16 object-cover rounded bg-brand-surface2 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-serif text-base text-brand-text truncate">
+                          {line.product.name}
+                        </h4>
+                        <div className="text-xs text-brand-textMuted">
+                          {formatBRL(line.product.price)} un.
+                        </div>
+                        <div className="text-xs text-brand-accent font-semibold mt-1">
+                          Subtotal: {formatBRL(line.qty * line.product.price)}
+                        </div>
+                      </div>
+
+                      {/* Controle de Quantidade */}
+                      <div className="flex items-center gap-1.5 border border-brand-border rounded p-1 bg-brand-surface">
+                        <button
+                          onClick={() => onChangeQty(line.productId, -1)}
+                          className="p-1 text-brand-textMuted hover:text-white"
+                          title="Diminuir"
+                        >
+                          <Icon name="minus" size={14} />
+                        </button>
+                        <span className="text-sm font-semibold w-6 text-center text-brand-text">
+                          {line.qty}
+                        </span>
+                        <button
+                          onClick={() => onChangeQty(line.productId, 1)}
+                          className="p-1 text-brand-textMuted hover:text-white"
+                          title="Aumentar"
+                        >
+                          <Icon name="plus" size={14} />
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => onRemove(line.productId)}
+                        className="p-2 text-brand-muted hover:text-red-400 transition-colors"
+                        title="Remover produto"
+                      >
+                        <Icon name="trash" size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-brand-surface border border-brand-border rounded p-5 mb-8">
+                  <div className="flex justify-between items-center text-sm text-brand-textMuted mb-2">
+                    <span>Subtotal dos itens</span>
+                    <span>{formatBRL(totalValue)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-3 border-t border-brand-border">
+                    <span className="font-medium text-brand-text">Total da Reserva</span>
+                    <span className="font-serif text-2xl font-bold text-brand-accent">
+                      {formatBRL(totalValue)}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={onContinue}
+                  className="w-full bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-4 rounded text-base transition-all shadow-lg flex items-center justify-center gap-2"
+                >
+                  <span>Continuar para Opções de Embalagem</span>
+                  <Icon name="chevronRight" size={18} />
+                </button>
+              </div>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       TELA DE ESCOLHA DE EMBALAGEM DE PRESENTE
+    ========================================================================== */
+    function GiftWrapScreen({ onYes, onNo, onBack }) {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <header className="p-6 border-b border-brand-border flex items-center gap-4">
+            <button onClick={onBack} className="text-brand-textMuted hover:text-white">
+              <Icon name="arrowLeft" size={20} />
+            </button>
+            <h2 className="font-serif italic text-2xl text-brand-text">Embalagem</h2>
+          </header>
+
+          <main className="max-w-md mx-auto w-full p-6 my-auto text-center">
+            <div className="w-16 h-16 bg-brand-surface2 border border-brand-border rounded-full flex items-center justify-center mx-auto mb-6 text-brand-accent">
+              <Icon name="gift" size={30} />
+            </div>
+
+            <h3 className="font-serif text-2xl text-brand-text mb-3">
+              Deseja embalagem para presente?
+            </h3>
+            <p className="text-sm text-brand-textMuted leading-relaxed mb-8">
+              Nossa equipe monta caixas decorativas exclusivas com laço de fita e cartão artesanal. Você poderá escolher exatamente quais itens colocar em cada caixa no próximo passo.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={onYes}
+                className="w-full bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-4 rounded transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <Icon name="gift" size={18} />
+                <span>Sim, quero organizar embalagens de presente</span>
+              </button>
+              <button
+                onClick={onNo}
+                className="w-full bg-transparent border border-brand-border hover:border-brand-muted text-brand-text py-3.5 rounded text-sm transition-colors"
+              >
+                Não, prefiro embalagem padrão de envio
+              </button>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       TELA DE ORGANIZAÇÃO DE EMBALAGENS DE PRESENTE
+    ========================================================================== */
+    function PackagesScreen({
+      cartLines,
+      packages,
+      totalItems,
+      totalUsed,
+      onAddPackage,
+      onRemovePackage,
+      onAdjust,
+      remainingFor,
+      onBack,
+      onContinue,
+    }) {
+      const allAllocated = totalUsed === totalItems && totalItems > 0;
+
+      return (
+        <div className="min-h-screen flex flex-col pb-12">
+          <header className="sticky top-0 z-30 bg-brand-bg border-b border-brand-border px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={onBack} className="text-brand-textMuted hover:text-white">
+                <Icon name="arrowLeft" size={20} />
+              </button>
+              <h2 className="font-serif italic text-2xl text-brand-text">
+                Montagem das Embalagens
+              </h2>
+            </div>
+            <div className="text-xs text-brand-textMuted">
+              {packages.length} {packages.length === 1 ? "caixa" : "caixas"}
+            </div>
+          </header>
+
+          <main className="max-w-xl mx-auto w-full p-6">
+            {/* Banner de Status de Alocação */}
+            <div
+              className={`p-4 rounded border mb-6 flex items-center justify-between ${
+                allAllocated
+                  ? "bg-emerald-950/40 border-emerald-800 text-emerald-200"
+                  : "bg-brand-surface border-brand-accent/50 text-brand-text"
+              }`}
+            >
+              <div>
+                <span className="text-xs block text-brand-textMuted">Status dos itens</span>
+                <span className="font-semibold text-sm">
+                  {totalUsed} de {totalItems} itens distribuídos
+                </span>
+              </div>
+              {allAllocated ? (
+                <span className="text-xs bg-emerald-800 text-emerald-100 px-2.5 py-1 rounded font-medium flex items-center gap-1">
+                  <Icon name="check" size={13} />
+                  Tudo organizado
+                </span>
+              ) : (
+                <span className="text-xs text-brand-accent font-medium">
+                  Distribua todos os itens
+                </span>
+              )}
+            </div>
+
+            {/* Resumo de itens restantes */}
+            <div className="bg-brand-surface2/60 border border-brand-border rounded p-3 mb-6 text-xs text-brand-textMuted flex flex-wrap gap-x-4 gap-y-1">
+              {cartLines.map((l) => {
+                const rem = remainingFor(l.productId, l.qty);
+                return (
+                  <span
+                    key={l.productId}
+                    className={rem > 0 ? "text-amber-300 font-medium" : "text-brand-muted"}
+                  >
+                    {l.product.name}: <strong>{rem} restante(s)</strong>
+                  </span>
+                );
+              })}
+            </div>
+
+            {/* Lista de Caixas / Embalagens */}
+            <div className="flex flex-col gap-5 mb-6">
+              {packages.map((pkg, idx) => {
+                const pkgTotal = Object.values(pkg.items).reduce((a, b) => a + b, 0);
+                return (
+                  <div
+                    key={pkg.id}
+                    className="bg-brand-surface border border-brand-border rounded-lg p-5 relative"
+                  >
+                    <div className="flex justify-between items-center pb-3 border-b border-brand-border mb-3">
+                      <div className="flex items-center gap-2">
+                        <Icon name="gift" size={16} className="text-brand-accent" />
+                        <h4 className="font-serif text-base font-medium text-brand-text">
+                          Embalagem {idx + 1}
+                        </h4>
+                      </div>
+                      {packages.length > 1 && (
+                        <button
+                          onClick={() => onRemovePackage(pkg.id)}
+                          className="text-brand-muted hover:text-red-400 text-xs p-1 flex items-center gap-1"
+                        >
+                          <Icon name="trash" size={14} />
+                          <span>Remover caixa</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="divide-y divide-brand-border/40">
+                      {cartLines.map((l) => {
+                        const inThisPkg = pkg.items[l.productId] || 0;
+                        const rem = remainingFor(l.productId, l.qty);
+                        return (
+                          <div
+                            key={l.productId}
+                            className="py-2.5 flex items-center justify-between text-sm"
+                          >
+                            <div className="flex-1 pr-2">
+                              <span className="text-brand-text block text-xs sm:text-sm">
+                                {l.product.name}
+                              </span>
+                              <span className="text-[11px] text-brand-muted">
+                                {rem} disponível(is) fora desta caixa
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 border border-brand-border rounded p-0.5 bg-brand-surface2">
+                              <button
+                                onClick={() => onAdjust(pkg.id, l.productId, -1, l.qty)}
+                                disabled={inThisPkg <= 0}
+                                className="p-1 disabled:opacity-30 text-brand-text hover:text-white"
+                              >
+                                <Icon name="minus" size={13} />
+                              </button>
+                              <span className="w-5 text-center text-xs font-bold text-brand-text">
+                                {inThisPkg}
+                              </span>
+                              <button
+                                onClick={() => onAdjust(pkg.id, l.productId, 1, l.qty)}
+                                disabled={rem <= 0}
+                                className="p-1 disabled:opacity-30 text-brand-text hover:text-white"
+                              >
+                                <Icon name="plus" size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-3 pt-2 text-right text-xs text-brand-muted">
+                      Total nesta embalagem: <strong className="text-brand-text">{pkgTotal} itens</strong>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Ações */}
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={onAddPackage}
+                disabled={packages.length >= totalItems}
+                className="w-full bg-brand-surface border border-brand-border hover:border-brand-accent text-brand-text py-3 rounded text-sm font-medium transition-colors disabled:opacity-40"
+              >
+                + Adicionar outra caixa de presente
+              </button>
+
+              <button
+                onClick={onContinue}
+                disabled={!allAllocated}
+                className={`w-full py-4 rounded text-base font-semibold transition-all shadow-lg flex items-center justify-center gap-2 ${
+                  allAllocated
+                    ? "bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent"
+                    : "bg-brand-surface2 text-brand-muted border border-brand-border cursor-not-allowed"
+                }`}
+              >
+                <span>Prosseguir para Seus Dados</span>
+                <Icon name="chevronRight" size={18} />
+              </button>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       TELA DE DADOS DO CLIENTE (CHECKOUT)
+    ========================================================================== */
+    function CustomerScreen({
+      name,
+      setName,
+      whatsapp,
+      setWhatsapp,
+      notes,
+      setNotes,
+      totalValue,
+      totalItems,
+      giftWrap,
+      packagesCount,
+      onBack,
+      onConfirm,
+      loading,
+    }) {
+      // Máscara simplificada de WhatsApp
+      const handlePhoneChange = (val) => {
+        const cleaned = val.replace(/\D/g, "").slice(0, 11);
+        let formatted = cleaned;
+        if (cleaned.length > 2) {
+          formatted = `(${cleaned.slice(0, 2)}) ${cleaned.slice(2)}`;
+        }
+        if (cleaned.length > 7) {
+          formatted = `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
+        }
+        setWhatsapp(formatted);
+      };
+
+      const canSubmit = name.trim().length >= 2 && whatsapp.replace(/\D/g, "").length >= 10;
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          <header className="p-6 border-b border-brand-border flex items-center gap-4">
+            <button onClick={onBack} className="text-brand-textMuted hover:text-white">
+              <Icon name="arrowLeft" size={20} />
+            </button>
+            <h2 className="font-serif italic text-2xl text-brand-text">Finalizar Reserva</h2>
+          </header>
+
+          <main className="max-w-md mx-auto w-full p-6 my-auto">
+            <p className="text-sm text-brand-textMuted mb-6 leading-relaxed">
+              Informe seu nome e WhatsApp para que nossa equipe separe suas fragrâncias e envie a confirmação de retirada.
+            </p>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1.5 font-medium">
+                  Seu Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: Mariana Silva"
+                  className="w-full bg-brand-surface border border-brand-border rounded px-4 py-3 text-sm text-brand-text focus:border-brand-accent outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1.5 font-medium">
+                  WhatsApp para Contato *
+                </label>
+                <input
+                  type="tel"
+                  value={whatsapp}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
+                  placeholder="(11) 98765-4321"
+                  className="w-full bg-brand-surface border border-brand-border rounded px-4 py-3 text-sm text-brand-text focus:border-brand-accent outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1.5 font-medium">
+                  Observações ou data prevista de retirada (opcional)
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Ex: Gostaria de retirar na sexta-feira à tarde..."
+                  rows="2"
+                  className="w-full bg-brand-surface border border-brand-border rounded px-4 py-2.5 text-sm text-brand-text focus:border-brand-accent outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Resumo Final */}
+            <div className="bg-brand-surface border border-brand-border rounded p-4 mb-6 text-sm">
+              <div className="flex justify-between text-brand-textMuted mb-1.5">
+                <span>Total de peças:</span>
+                <span className="text-brand-text font-medium">{totalItems} itens</span>
+              </div>
+              <div className="flex justify-between text-brand-textMuted mb-2">
+                <span>Embalagem para presente:</span>
+                <span className="text-brand-text font-medium">
+                  {giftWrap ? `Sim (${packagesCount} caixas)` : "Não (padrão)"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-brand-border text-base">
+                <span className="font-semibold text-brand-text">Total a pagar na retirada:</span>
+                <span className="font-serif text-xl font-bold text-brand-accent">
+                  {formatBRL(totalValue)}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={onConfirm}
+              disabled={!canSubmit || loading}
+              className={`w-full py-4 rounded text-base font-semibold transition-all shadow-lg flex items-center justify-center gap-2 ${
+                canSubmit && !loading
+                  ? "bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent"
+                  : "bg-brand-surface2 text-brand-muted border border-brand-border cursor-not-allowed"
+              }`}
+            >
+              {loading ? (
+                <span>Gravando sua reserva...</span>
+              ) : (
+                <>
+                  <Icon name="check" size={18} />
+                  <span>Confirmar Reserva</span>
+                </>
+              )}
+            </button>
+          </main>
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       TELA DE CONFIRMAÇÃO COM DISPARO PARA WHATSAPP
+    ========================================================================== */
+    function ConfirmationScreen({ reservation, onHome }) {
+      // Gera texto pré-formatado para o WhatsApp da loja
+      const generateWhatsAppUrl = () => {
+        let text = `🕯️ *NOVA RESERVA — CASA VELLUMINE*\n`;
+        text += `Código: #${reservation.id.slice(-6).toUpperCase()}\n`;
+        text += `Cliente: *${reservation.name}*\n`;
+        text += `WhatsApp: ${reservation.whatsapp}\n\n`;
+        text += `*ITENS RESERVADOS:*\n`;
+        reservation.items.forEach((it) => {
+          text += `• ${it.qty}x ${it.name} ${it.size ? `(${it.size})` : ""} — ${formatBRL(it.qty * it.price)}\n`;
+        });
+        text += `\n*Total:* ${formatBRL(reservation.total)}\n`;
+        text += `*Embalagem para presente:* ${reservation.giftWrap ? "Sim" : "Não"}\n`;
+
+        if (reservation.giftWrap && reservation.packages.length > 0) {
+          text += `\n*Organização das Caixas:*\n`;
+          reservation.packages.forEach((pkg, idx) => {
+            text += `  Caixa ${idx + 1}: ` + pkg.items.map((i) => `${i.qty}x ${i.name}`).join(", ") + `\n`;
+          });
+        }
+
+        if (reservation.notes) {
+          text += `\n*Observações:* ${reservation.notes}\n`;
+        }
+        text += `\nOlá! Acabei de fazer essa reserva no site e gostaria de confirmar a retirada.`;
+
+        return `https://wa.me/${WHATSAPP_STORE_PHONE}?text=${encodeURIComponent(text)}`;
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+          <div className="max-w-md w-full bg-brand-surface border border-brand-border rounded-xl p-8 shadow-2xl">
+            <div className="w-16 h-16 bg-brand-accent/20 border border-brand-accent text-brand-accent rounded-full flex items-center justify-center mx-auto mb-5">
+              <Icon name="check" size={32} />
+            </div>
+
+            <span className="text-xs uppercase tracking-widest text-brand-accent font-semibold block mb-1">
+              Reserva Registrada
+            </span>
+            <h2 className="font-serif text-3xl text-brand-text mb-2">Muito Obrigado!</h2>
+            <p className="text-sm text-brand-textMuted mb-6 leading-relaxed">
+              Sua reserva foi registrada para <strong>{reservation.name}</strong>.
+            </p>
+
+            {/* Código da Reserva */}
+            <div className="bg-brand-surface2 border border-brand-border rounded p-3 mb-6 flex justify-between items-center text-sm">
+              <span className="text-brand-textMuted">Código da Reserva:</span>
+              <span className="font-mono font-bold text-brand-accent">
+                #{reservation.id.slice(-6).toUpperCase()}
+              </span>
+            </div>
+
+            {/* Detalhes dos Itens */}
+            <div className="text-left divide-y divide-brand-border/60 border-y border-brand-border/60 mb-6 text-xs sm:text-sm">
+              {reservation.items.map((it, idx) => (
+                <div key={idx} className="py-2.5 flex justify-between">
+                  <span className="text-brand-text">
+                    {it.qty}x {it.name}
+                  </span>
+                  <span className="text-brand-textMuted font-medium">
+                    {formatBRL(it.qty * it.price)}
+                  </span>
+                </div>
+              ))}
+              <div className="py-3 flex justify-between font-bold text-brand-text text-base">
+                <span>Total</span>
+                <span className="text-brand-accent font-serif">{formatBRL(reservation.total)}</span>
+              </div>
+            </div>
+
+            {/* Botão de Envio para WhatsApp da Loja */}
+            <a
+              href={generateWhatsAppUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3.5 rounded text-sm transition-all shadow-lg flex items-center justify-center gap-2 mb-3"
+            >
+              <Icon name="phone" size={18} />
+              <span>Enviar Pedido no WhatsApp da Loja</span>
+            </a>
+
+            <button
+              onClick={onHome}
+              className="w-full bg-transparent border border-brand-border hover:border-brand-muted text-brand-text py-3 rounded text-sm transition-colors"
+            >
+              Voltar à Página Inicial
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       TELA DE LOGIN DO ADMINISTRADOR
+    ========================================================================== */
+    function AdminLoginScreen({ onSuccess, onBack, onUseDemo }) {
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState("");
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setError("");
+        setLoading(true);
+        try {
+          const data = await supabaseSignIn(email.trim(), password);
+          onSuccess({
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+            expires_at: data.expires_at,
+            user: data.user,
+          });
+        } catch (err) {
+          setError(err.message || "E-mail ou senha incorretos.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-6">
+          <div className="max-w-sm w-full bg-brand-surface border border-brand-border rounded-xl p-8 shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-brand-surface2 border border-brand-border rounded-full flex items-center justify-center mx-auto mb-3 text-brand-accent">
+                <Icon name="lock" size={22} />
+              </div>
+              <h2 className="font-serif text-2xl text-brand-text">Acesso do Lojista</h2>
+              <p className="text-xs text-brand-textMuted mt-1">
+                Autenticação via Supabase Auth
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-red-950/60 border border-red-800 text-red-200 text-xs p-3 rounded mb-4 text-center">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                  E-mail
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@casavellumine.com"
+                  className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2.5 text-sm text-brand-text focus:border-brand-accent outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                  Senha
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2.5 text-sm text-brand-text focus:border-brand-accent outline-none"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-3 rounded text-sm transition-all"
+              >
+                {loading ? "Entrando..." : "Entrar com Supabase"}
+              </button>
+            </form>
+
+            <div className="relative my-6 text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-brand-border"></div>
+              </div>
+              <span className="relative bg-brand-surface px-3 text-[11px] uppercase tracking-wider text-brand-muted">
+                Ou acesse sem banco
+              </span>
+            </div>
+
+            <button
+              onClick={onUseDemo}
+              className="w-full bg-brand-surface2 hover:bg-brand-surface2/80 border border-brand-accent/40 text-brand-accent py-2.5 rounded text-xs font-semibold transition-colors"
+            >
+              Modo Demonstração Rápida
+            </button>
+
+            <button
+              onClick={onBack}
+              className="w-full mt-4 text-xs text-brand-muted hover:text-white transition-colors"
+            >
+              ← Voltar ao site
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ==========================================================================
+       PAINEL ADMINISTRATIVO COMPLETO
+    ========================================================================== */
+    function AdminPanel({
+      session,
+      adminTab,
+      setAdminTab,
+      products,
+      categories,
+      reservations,
+      reservationsLoading,
+      uniqueCustomerCount,
+      totalItemsReservedCount,
+      totalRevenueReserved,
+      itemAggregation,
+      statusFilter,
+      setStatusFilter,
+      adminSearch,
+      setAdminSearch,
+      onUpdateStatus,
+      onDeleteProduct,
+      onToggleProductActive,
+      onStartNewProduct,
+      onEditProduct,
+      productDraft,
+      setProductDraft,
+      photoUrlInput,
+      setPhotoUrlInput,
+      newCategoryInput,
+      setNewCategoryInput,
+      onAddCategory,
+      onSaveProduct,
+      onCancelProductForm,
+      onExportCSV,
+      onRefreshReservations,
+      onLogout,
+      onBackHome,
+      isUsingLocalData,
+      setIsUsingLocalData,
+      addToast,
+    }) {
+      const [configUrl, setConfigUrl] = useState(() => getSupabaseConfig().url);
+      const [configKey, setConfigKey] = useState(() => getSupabaseConfig().key);
+
+      // Filtragem das reservas
+      const filteredReservations = useMemo(() => {
+        return reservations.filter((r) => {
+          const matchStatus = statusFilter === "todos" || r.status === statusFilter;
+          const matchSearch =
+            !adminSearch.trim() ||
+            r.name.toLowerCase().includes(adminSearch.toLowerCase()) ||
+            r.whatsapp.includes(adminSearch);
+          return matchStatus && matchSearch;
+        });
+      }, [reservations, statusFilter, adminSearch]);
+
+      const handleSaveConfig = (e) => {
+        e.preventDefault();
+        saveSupabaseConfig({
+          url: configUrl.trim(),
+          key: configKey.trim(),
+          useLocal: isUsingLocalData,
+        });
+        addToast("Configurações do Supabase salvas!", "success");
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col bg-brand-bg">
+          {/* Top Bar Admin */}
+          <header className="bg-brand-surface border-b border-brand-border px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={onBackHome}
+                className="text-xs text-brand-textMuted hover:text-white flex items-center gap-1.5 border border-brand-border px-3 py-1.5 rounded"
+              >
+                <Icon name="arrowLeft" size={14} />
+                <span>Ver Loja</span>
+              </button>
+              <div>
+                <h1 className="font-serif italic text-xl text-brand-accent">
+                  Casa Vellumine · Gestão
+                </h1>
+                <div className="text-xs text-brand-muted flex items-center gap-2">
+                  <span>{session.user?.email || "Administrador"}</span>
+                  <span
+                    className={`inline-block w-2 h-2 rounded-full ${
+                      isUsingLocalData ? "bg-amber-400" : "bg-emerald-400"
+                    }`}
+                  />
+                  <span>{isUsingLocalData ? "Modo Local" : "Supabase Conectado"}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onExportCSV}
+                className="bg-brand-surface2 hover:bg-brand-border text-brand-text px-3.5 py-1.5 rounded text-xs font-medium flex items-center gap-1.5 border border-brand-border transition-colors"
+                title="Exportar reservas para CSV"
+              >
+                <Icon name="download" size={14} />
+                <span>Exportar CSV</span>
+              </button>
+              <button
+                onClick={onLogout}
+                className="text-brand-muted hover:text-red-400 p-2 rounded transition-colors"
+                title="Encerrar sessão"
+              >
+                <Icon name="logOut" size={18} />
+              </button>
+            </div>
+          </header>
+
+          {/* Abas do Painel */}
+          <nav className="bg-brand-surface2/50 border-b border-brand-border px-6 flex gap-1 overflow-x-auto">
+            {[
+              { id: "dashboard", label: "Resumo", icon: "layoutGrid" },
+              { id: "products", label: "Produtos", icon: "package" },
+              { id: "reservations", label: "Reservas por Cliente", icon: "users" },
+              { id: "items", label: "Separação por Item", icon: "shoppingBag" },
+              { id: "settings", label: "Conexão & Banco", icon: "settings" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setAdminTab(tab.id)}
+                className={`flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
+                  adminTab === tab.id
+                    ? "border-brand-accent text-brand-accent bg-brand-surface2/80"
+                    : "border-transparent text-brand-textMuted hover:text-white"
+                }`}
+              >
+                <Icon name={tab.icon} size={15} />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          {/* Conteúdo da Aba Ativa */}
+          <main className="max-w-6xl mx-auto w-full p-6 flex-1">
+            {/* 1. ABA DASHBOARD */}
+            {adminTab === "dashboard" && (
+              <div className="space-y-8 animate-fade-in">
+                {/* 4 Cards de Métricas */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-brand-surface border border-brand-border rounded-lg p-5">
+                    <span className="text-xs text-brand-textMuted uppercase tracking-wider block mb-1">
+                      Total de Reservas
+                    </span>
+                    <span className="font-serif text-3xl font-semibold text-brand-accent">
+                      {reservations.length}
+                    </span>
+                  </div>
+                  <div className="bg-brand-surface border border-brand-border rounded-lg p-5">
+                    <span className="text-xs text-brand-textMuted uppercase tracking-wider block mb-1">
+                      Clientes Únicos
+                    </span>
+                    <span className="font-serif text-3xl font-semibold text-brand-text">
+                      {uniqueCustomerCount}
+                    </span>
+                  </div>
+                  <div className="bg-brand-surface border border-brand-border rounded-lg p-5">
+                    <span className="text-xs text-brand-textMuted uppercase tracking-wider block mb-1">
+                      Peças Reservadas
+                    </span>
+                    <span className="font-serif text-3xl font-semibold text-brand-text">
+                      {totalItemsReservedCount}
+                    </span>
+                  </div>
+                  <div className="bg-brand-surface border border-brand-border rounded-lg p-5">
+                    <span className="text-xs text-brand-textMuted uppercase tracking-wider block mb-1">
+                      Faturamento Previsto
+                    </span>
+                    <span className="font-serif text-2xl sm:text-3xl font-semibold text-emerald-400">
+                      {formatBRL(totalRevenueReserved)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ranking dos Itens Mais Reservados */}
+                <div className="bg-brand-surface border border-brand-border rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-serif text-lg text-brand-text">
+                      Top 5 Fragrâncias Mais Reservadas
+                    </h3>
+                    <button
+                      onClick={() => setAdminTab("items")}
+                      className="text-xs text-brand-accent hover:underline"
+                    >
+                      Ver todos os itens →
+                    </button>
+                  </div>
+
+                  {itemAggregation.length === 0 ? (
+                    <p className="text-sm text-brand-muted py-4">Nenhuma reserva realizada ainda.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {itemAggregation.slice(0, 5).map((it, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-3 rounded bg-brand-surface2 border border-brand-border/60 text-sm"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-xs text-brand-accent font-bold">
+                              0{idx + 1}
+                            </span>
+                            <div>
+                              <span className="font-medium text-brand-text block">{it.name}</span>
+                              <span className="text-xs text-brand-muted">
+                                {it.aroma} {it.size ? `· ${it.size}` : ""}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-brand-accent text-sm">
+                              {it.qty} {it.qty === 1 ? "unidade" : "unidades"}
+                            </span>
+                            <span className="text-xs text-brand-muted block">
+                              {formatBRL(it.total)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Últimas Reservas Recebidas */}
+                <div className="bg-brand-surface border border-brand-border rounded-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-serif text-lg text-brand-text">Últimas Reservas</h3>
+                    <button
+                      onClick={() => setAdminTab("reservations")}
+                      className="text-xs text-brand-accent hover:underline"
+                    >
+                      Gerenciar todas →
+                    </button>
+                  </div>
+                  {reservations.length === 0 ? (
+                    <p className="text-sm text-brand-muted py-4">Nenhuma reserva registrada.</p>
+                  ) : (
+                    <div className="divide-y divide-brand-border/60">
+                      {reservations.slice(0, 4).map((r) => (
+                        <div key={r.id} className="py-3 flex items-center justify-between text-sm">
+                          <div>
+                            <span className="font-medium text-brand-text block">{r.name}</span>
+                            <span className="text-xs text-brand-muted">
+                              {new Date(r.createdAt).toLocaleString("pt-BR")} · {r.items.length}{" "}
+                              {r.items.length === 1 ? "item" : "itens"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-serif font-semibold text-brand-accent">
+                              {formatBRL(r.total)}
+                            </span>
+                            <span
+                              className={`text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded ${
+                                r.status === "concluida"
+                                  ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                                  : r.status === "cancelada"
+                                  ? "bg-red-950 text-red-300 border border-red-800"
+                                  : "bg-amber-950 text-amber-300 border border-amber-800"
+                              }`}
+                            >
+                              {r.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 2. ABA PRODUTOS */}
+            {adminTab === "products" && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="font-serif text-2xl text-brand-text">Catálogo de Produtos</h2>
+                    <p className="text-xs text-brand-textMuted">
+                      {products.length} itens cadastrados ({products.filter((p) => p.active).length}{" "}
+                      ativos)
+                    </p>
+                  </div>
+                  <button
+                    onClick={onStartNewProduct}
+                    className="bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold px-4 py-2 rounded text-xs flex items-center gap-2"
+                  >
+                    <Icon name="plus" size={14} />
+                    <span>Cadastrar Novo Produto</span>
+                  </button>
+                </div>
+
+                <div className="bg-brand-surface border border-brand-border rounded-lg overflow-hidden">
+                  <div className="divide-y divide-brand-border/60">
+                    {products.map((p) => (
+                      <div
+                        key={p.id}
+                        className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between"
+                      >
+                        <div className="flex items-center gap-4">
+                          <img
+                            src={p.photos[p.mainPhoto || 0] || ""}
+                            alt={p.name}
+                            className="w-14 h-14 object-cover rounded bg-brand-surface2 flex-shrink-0"
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-serif text-base font-medium text-brand-text">
+                                {p.name}
+                              </h4>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                  p.active
+                                    ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                                    : "bg-zinc-800 text-zinc-400"
+                                }`}
+                              >
+                                {p.active ? "Ativo" : "Inativo"}
+                              </span>
+                            </div>
+                            <div className="text-xs text-brand-textMuted">
+                              {p.category} · {p.aroma} {p.size ? `· ${p.size}` : ""} ·{" "}
+                              <strong className="text-brand-accent">{formatBRL(p.price)}</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <button
+                            onClick={() => onToggleProductActive(p.id)}
+                            className="text-xs px-3 py-1.5 border border-brand-border rounded hover:bg-brand-surface2 text-brand-textMuted hover:text-white"
+                          >
+                            {p.active ? "Desativar" : "Ativar"}
+                          </button>
+                          <button
+                            onClick={() => onEditProduct(p)}
+                            className="p-2 border border-brand-border rounded text-brand-text hover:text-brand-accent"
+                            title="Editar"
+                          >
+                            <Icon name="pencil" size={15} />
+                          </button>
+                          <button
+                            onClick={() => onDeleteProduct(p.id)}
+                            className="p-2 border border-brand-border rounded text-brand-muted hover:text-red-400"
+                            title="Excluir"
+                          >
+                            <Icon name="trash" size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* FORMULÁRIO DE PRODUTO (NOVO OU EDITAR) */}
+            {adminTab === "productForm" && (
+              <div className="max-w-2xl mx-auto bg-brand-surface border border-brand-border rounded-lg p-6 sm:p-8 animate-fade-in">
+                <h3 className="font-serif text-2xl text-brand-text mb-6">
+                  {productDraft.id ? "Editar Produto" : "Cadastrar Novo Produto"}
+                </h3>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                        Nome do Produto *
+                      </label>
+                      <input
+                        type="text"
+                        value={productDraft.name}
+                        onChange={(e) =>
+                          setProductDraft({ ...productDraft, name: e.target.value })
+                        }
+                        placeholder="Ex: Vela Vanilla & Figo"
+                        className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                        Preço (R$) *
+                      </label>
+                      <input
+                        type="text"
+                        value={productDraft.price}
+                        onChange={(e) =>
+                          setProductDraft({ ...productDraft, price: e.target.value })
+                        }
+                        placeholder="89.90"
+                        className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Categoria */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                      Categoria
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={productDraft.category}
+                        onChange={(e) =>
+                          setProductDraft({ ...productDraft, category: e.target.value })
+                        }
+                        className="flex-1 bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none"
+                      >
+                        {categories.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Criar nova categoria */}
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        value={newCategoryInput}
+                        onChange={(e) => setNewCategoryInput(e.target.value)}
+                        placeholder="Adicionar nova categoria..."
+                        className="flex-1 bg-brand-surface2 border border-brand-border rounded px-3 py-1.5 text-xs text-brand-text focus:border-brand-accent outline-none"
+                      />
+                      <button
+                        onClick={onAddCategory}
+                        className="text-xs px-3 py-1.5 bg-brand-surface2 border border-brand-border hover:border-brand-accent text-brand-accent rounded"
+                      >
+                        + Adicionar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                        Família Olfativa / Aroma
+                      </label>
+                      <input
+                        type="text"
+                        value={productDraft.aroma}
+                        onChange={(e) =>
+                          setProductDraft({ ...productDraft, aroma: e.target.value })
+                        }
+                        placeholder="Baunilha Bourbon e Âmbar"
+                        className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                        Tamanho / Especificação
+                      </label>
+                      <input
+                        type="text"
+                        value={productDraft.size}
+                        onChange={(e) =>
+                          setProductDraft({ ...productDraft, size: e.target.value })
+                        }
+                        placeholder="210g (~40h de queima)"
+                        className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                      Recomendações de Uso
+                    </label>
+                    <textarea
+                      value={productDraft.usage}
+                      onChange={(e) =>
+                        setProductDraft({ ...productDraft, usage: e.target.value })
+                      }
+                      rows="2"
+                      placeholder="Apare o pavio antes de reacender..."
+                      className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none resize-none"
+                    />
+                  </div>
+
+                  {/* Gerenciamento de Fotos */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                      Fotos do Produto
+                    </label>
+                    <div className="flex gap-2 mb-3">
+                      <input
+                        type="text"
+                        value={photoUrlInput}
+                        onChange={(e) => setPhotoUrlInput(e.target.value)}
+                        placeholder="Cole o link (URL) da imagem..."
+                        className="flex-1 bg-brand-surface2 border border-brand-border rounded px-3 py-1.5 text-xs text-brand-text focus:border-brand-accent outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          if (photoUrlInput.trim()) {
+                            setProductDraft((d) => ({
+                              ...d,
+                              photos: [...d.photos, photoUrlInput.trim()],
+                            }));
+                            setPhotoUrlInput("");
+                          }
+                        }}
+                        className="text-xs px-3 py-1.5 bg-brand-surface2 border border-brand-border text-brand-text rounded hover:border-brand-accent"
+                      >
+                        Adicionar Link
+                      </button>
+                    </div>
+
+                    {/* Upload de arquivo local (converte para Base64) */}
+                    <div className="mb-3">
+                      <label className="inline-flex items-center gap-2 text-xs bg-brand-surface2 border border-brand-border hover:border-brand-accent text-brand-text px-3 py-1.5 rounded cursor-pointer">
+                        <Icon name="plus" size={14} />
+                        <span>Carregar foto do computador</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files && e.target.files[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                setProductDraft((d) => ({
+                                  ...d,
+                                  photos: [...d.photos, reader.result],
+                                }));
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {/* Miniaturas de Fotos */}
+                    <div className="flex flex-wrap gap-3">
+                      {productDraft.photos.map((url, idx) => (
+                        <div
+                          key={idx}
+                          className="relative w-16 h-16 rounded overflow-hidden border border-brand-border group"
+                        >
+                          <img src={url} alt="" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() =>
+                              setProductDraft((d) => ({ ...d, mainPhoto: idx }))
+                            }
+                            className={`absolute bottom-1 left-1 p-1 rounded-full ${
+                              productDraft.mainPhoto === idx
+                                ? "bg-brand-accent text-brand-onAccent"
+                                : "bg-black/60 text-white"
+                            }`}
+                            title="Marcar como foto principal"
+                          >
+                            <Icon name="star" size={10} />
+                          </button>
+                          <button
+                            onClick={() =>
+                              setProductDraft((d) => ({
+                                ...d,
+                                photos: d.photos.filter((_, i) => i !== idx),
+                                mainPhoto: d.mainPhoto >= idx ? Math.max(0, d.mainPhoto - 1) : d.mainPhoto,
+                              }))
+                            }
+                            className="absolute top-1 right-1 p-1 bg-black/60 text-white hover:text-red-400 rounded-full"
+                            title="Remover foto"
+                          >
+                            <Icon name="x" size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end mt-8 pt-4 border-t border-brand-border">
+                  <button
+                    onClick={onCancelProductForm}
+                    className="px-5 py-2.5 border border-brand-border text-brand-text rounded text-xs hover:bg-brand-surface2"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={onSaveProduct}
+                    className="px-6 py-2.5 bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold rounded text-xs"
+                  >
+                    Salvar Produto
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 3. ABA RESERVAS POR CLIENTE */}
+            {adminTab === "reservations" && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="font-serif text-2xl text-brand-text">
+                      Reservas por Cliente
+                    </h2>
+                    <p className="text-xs text-brand-textMuted">
+                      {filteredReservations.length} reservas listadas
+                    </p>
+                  </div>
+
+                  {/* Filtro por status */}
+                  <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
+                    {["todos", "pendente", "confirmada", "pronta", "concluida", "cancelada"].map(
+                      (st) => (
+                        <button
+                          key={st}
+                          onClick={() => setStatusFilter(st)}
+                          className={`px-3 py-1 rounded text-xs capitalize whitespace-nowrap border ${
+                            statusFilter === st
+                              ? "bg-brand-accent text-brand-onAccent border-brand-accent font-semibold"
+                              : "border-brand-border text-brand-textMuted hover:border-brand-muted"
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* Campo de Busca Rápida */}
+                <input
+                  type="text"
+                  value={adminSearch}
+                  onChange={(e) => setAdminSearch(e.target.value)}
+                  placeholder="Buscar por nome do cliente ou WhatsApp..."
+                  className="w-full bg-brand-surface border border-brand-border rounded px-4 py-2.5 text-sm text-brand-text focus:border-brand-accent outline-none"
+                />
+
+                {filteredReservations.length === 0 ? (
+                  <div className="text-center py-16 bg-brand-surface border border-brand-border rounded-lg text-brand-muted">
+                    Nenhuma reserva encontrada com os filtros atuais.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredReservations.map((r) => {
+                      const cleanPhone = r.whatsapp.replace(/\D/g, "");
+                      const clientWaUrl = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(
+                        `Olá ${r.name}, tudo bem? Aqui é da Casa Vellumine sobre a sua reserva #${r.id.slice(-6).toUpperCase()}!`
+                      )}`;
+
+                      return (
+                        <div
+                          key={r.id}
+                          className="bg-brand-surface border border-brand-border rounded-lg p-5 space-y-4"
+                        >
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-brand-border/60">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-serif text-lg font-semibold text-brand-text">
+                                  {r.name}
+                                </span>
+                                <span className="font-mono text-xs text-brand-muted">
+                                  #{r.id.slice(-6).toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="text-xs text-brand-textMuted flex items-center gap-2 mt-0.5">
+                                <span>{r.whatsapp}</span>
+                                <span>·</span>
+                                <span>{new Date(r.createdAt).toLocaleString("pt-BR")}</span>
+                              </div>
+                            </div>
+
+                            {/* Controles de Status e WhatsApp */}
+                            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                              <select
+                                value={r.status}
+                                onChange={(e) => onUpdateStatus(r.id, e.target.value)}
+                                className={`text-xs font-semibold px-3 py-1.5 rounded border outline-none cursor-pointer ${
+                                  r.status === "concluida"
+                                    ? "bg-emerald-950 border-emerald-800 text-emerald-300"
+                                    : r.status === "pronta"
+                                    ? "bg-sky-950 border-sky-800 text-sky-300"
+                                    : r.status === "cancelada"
+                                    ? "bg-red-950 border-red-800 text-red-300"
+                                    : "bg-amber-950 border-amber-800 text-amber-300"
+                                }`}
+                              >
+                                <option value="pendente">Pendente</option>
+                                <option value="confirmada">Confirmada</option>
+                                <option value="pronta">Pronta para Retirada</option>
+                                <option value="concluida">Concluída</option>
+                                <option value="cancelada">Cancelada</option>
+                              </select>
+
+                              <a
+                                href={clientWaUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors"
+                              >
+                                <Icon name="phone" size={13} />
+                                <span>WhatsApp</span>
+                              </a>
+                            </div>
+                          </div>
+
+                          {/* Itens da Reserva */}
+                          <div className="text-sm space-y-1">
+                            {r.items.map((it, idx) => (
+                              <div key={idx} className="flex justify-between text-xs sm:text-sm">
+                                <span className="text-brand-text">
+                                  {it.qty}x {it.name} {it.size ? `(${it.size})` : ""}
+                                </span>
+                                <span className="text-brand-textMuted">
+                                  {formatBRL(it.qty * it.price)}
+                                </span>
+                              </div>
+                            ))}
+                            <div className="pt-2 flex justify-between font-semibold text-brand-text text-sm border-t border-brand-border/40">
+                              <span>Total da Reserva:</span>
+                              <span className="font-serif text-brand-accent">
+                                {formatBRL(r.total)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Embalagens */}
+                          {r.giftWrap && r.packages.length > 0 && (
+                            <div className="bg-brand-surface2/60 border border-brand-border/60 rounded p-3 text-xs space-y-2">
+                              <span className="font-medium text-brand-accent flex items-center gap-1">
+                                <Icon name="gift" size={13} />
+                                Caixas de Presente:
+                              </span>
+                              {r.packages.map((pkg, idx) => (
+                                <div key={pkg.id || idx} className="text-brand-textMuted pl-2">
+                                  <strong>Caixa {idx + 1}:</strong>{" "}
+                                  {pkg.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {r.notes && (
+                            <div className="text-xs text-brand-muted bg-brand-surface2/40 p-2.5 rounded border border-brand-border/40">
+                              <strong>Obs:</strong> {r.notes}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4. ABA SEPARAÇÃO POR ITEM (PRODUÇÃO) */}
+            {adminTab === "items" && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="font-serif text-2xl text-brand-text">
+                      Separação e Produção por Item
+                    </h2>
+                    <p className="text-xs text-brand-textMuted">
+                      Soma consolidada de todos os produtos pedidos em reservas ativas
+                    </p>
+                  </div>
+                </div>
+
+                {itemAggregation.length === 0 ? (
+                  <div className="text-center py-16 bg-brand-surface border border-brand-border rounded-lg text-brand-muted">
+                    Nenhum item para separar no momento.
+                  </div>
+                ) : (
+                  <div className="bg-brand-surface border border-brand-border rounded-lg overflow-hidden divide-y divide-brand-border/60">
+                    {itemAggregation.map((it, idx) => (
+                      <div
+                        key={idx}
+                        className="p-4 flex items-center justify-between hover:bg-brand-surface2/40 transition-colors"
+                      >
+                        <div>
+                          <h4 className="font-serif text-base font-medium text-brand-text">
+                            {it.name}
+                          </h4>
+                          <span className="text-xs text-brand-textMuted">
+                            {it.aroma} {it.size ? `· ${it.size}` : ""}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-serif text-xl font-bold text-brand-accent block">
+                            {it.qty} {it.qty === 1 ? "peça" : "peças"}
+                          </span>
+                          <span className="text-xs text-brand-muted">
+                            Total reservado: {formatBRL(it.total)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 5. ABA CONFIGURAÇÕES & SUPABASE */}
+            {adminTab === "settings" && (
+              <div className="max-w-xl mx-auto bg-brand-surface border border-brand-border rounded-lg p-6 sm:p-8 space-y-6 animate-fade-in">
+                <div>
+                  <h3 className="font-serif text-2xl text-brand-text">
+                    Configurações do Supabase
+                  </h3>
+                  <p className="text-xs text-brand-textMuted mt-1">
+                    Conecte seu projeto do Supabase para persistir produtos e reservas na nuvem.
+                  </p>
+                </div>
+
+                {/* Alternador de Modo */}
+                <div className="bg-brand-surface2 border border-brand-border rounded p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-semibold text-brand-text block">
+                      Modo Local (Offline / Demo)
+                    </span>
+                    <span className="text-xs text-brand-textMuted">
+                      Salva catálogo e pedidos no armazenamento deste navegador sem exigir banco de dados.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isUsingLocalData}
+                    onChange={(e) => {
+                      setIsUsingLocalData(e.target.checked);
+                      localStorage.setItem(
+                        STORAGE_KEYS.USE_LOCAL,
+                        e.target.checked ? "true" : "false"
+                      );
+                      addToast(
+                        e.target.checked ? "Modo Local ativado." : "Modo Supabase ativado.",
+                        "info"
+                      );
+                    }}
+                    className="w-5 h-5 accent-brand-accent cursor-pointer"
+                  />
+                </div>
+
+                <form onSubmit={handleSaveConfig} className="space-y-4">
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                      Supabase Project URL
+                    </label>
+                    <input
+                      type="url"
+                      value={configUrl}
+                      onChange={(e) => setConfigUrl(e.target.value)}
+                      placeholder="https://seu-projeto.supabase.co"
+                      className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
+                      Supabase Anon / Publishable Key
+                    </label>
+                    <input
+                      type="text"
+                      value={configKey}
+                      onChange={(e) => setConfigKey(e.target.value)}
+                      placeholder="sb_publishable_..."
+                      className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none font-mono text-xs"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex gap-3">
+                    <button
+                      type="submit"
+                      className="flex-1 bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-2.5 rounded text-xs transition-colors"
+                    >
+                      Salvar Conexão
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfigUrl(DEFAULT_SUPABASE_URL);
+                        setConfigKey(DEFAULT_SUPABASE_KEY);
+                        addToast("Valores restaurados para o padrão.", "info");
+                      }}
+                      className="px-4 py-2.5 border border-brand-border text-brand-textMuted hover:text-white rounded text-xs"
+                    >
+                      Restaurar Padrão
+                    </button>
+                  </div>
+                </form>
+
+                {/* Reset de Dados Locais */}
+                <div className="pt-6 border-t border-brand-border/60">
+                  <span className="text-xs uppercase tracking-wider text-brand-muted block mb-2 font-medium">
+                    Manutenção Local
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Deseja recarregar o catálogo padrão de demonstração?")) {
+                        localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
+                        localStorage.removeItem(STORAGE_KEYS.CATEGORIES);
+                        location.reload();
+                      }
+                    }}
+                    className="text-xs text-brand-muted hover:text-red-400 underline"
+                  >
+                    Restaurar catálogo inicial de demonstração
+                  </button>
+                </div>
+              </div>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    // Renderiza a Aplicação
+    ReactDOM.createRoot(document.getElementById("root")).render(<CasaVellumineApp />);
+  </script>
+</body>
+</html>
