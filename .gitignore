@@ -1,0 +1,18 @@
+# Dependências
+node_modules/
+dist/
+build/
+
+# Variáveis de ambiente e segredos
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Arquivos de sistema e IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
