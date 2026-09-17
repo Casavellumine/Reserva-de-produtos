@@ -1,6 +1,6 @@
 {
   "name": "casa-vellumine-reservas",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Sistema de Reserva de Produtos e Embalagens de Presente para Casa Vellumine",
   "scripts": {
@@ -14,7 +14,7 @@
     "react-dom": "^18.3.1",
     "lucide-react": "^0.395.0",
     "vite": "^6.0.0",
-    "wrangler": "^4.131.2"
+    "wrangler": "^4.134.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
