@@ -579,20 +579,32 @@
         }
       }
 
-      // Restaura sessão do Administrador
+      // Restaura sessão do Administrador e suporta link direto #admin
       useEffect(() => {
         loadCatalog();
+        let currentSession = null;
         try {
           const savedSession = localStorage.getItem(STORAGE_KEYS.SESSION);
           if (savedSession) {
             const parsed = JSON.parse(savedSession);
             if (parsed.expires_at && parsed.expires_at * 1000 > Date.now()) {
+              currentSession = parsed;
               setSession(parsed);
             } else {
               localStorage.removeItem(STORAGE_KEYS.SESSION);
             }
           }
         } catch (e) {}
+
+        const hash = window.location.hash.toLowerCase();
+        const search = window.location.search.toLowerCase();
+        if (hash === "#admin" || search.includes("admin")) {
+          if (currentSession) {
+            setView("admin");
+          } else {
+            setView("adminLogin");
+          }
+        }
       }, []);
 
       // Carrega reservas quando autenticado como admin
@@ -761,12 +773,32 @@
         try {
           const cfg = getSupabaseConfig();
           if (!cfg.useLocal && !isUsingLocalData) {
-            const rows = await supabaseRest("reservations", {
-              method: "POST",
-              body: [reservationToDb(reservation)],
-            });
-            if (rows && rows[0]) {
-              reservation.id = String(rows[0].id);
+            try {
+              const rows = await supabaseRest("reservations", {
+                method: "POST",
+                body: [reservationToDb(reservation)],
+              });
+              if (rows && rows[0]) {
+                reservation.id = String(rows[0].id);
+              }
+            } catch (errPost) {
+              // Se falhou por colunas ausentes antes da execução do script SQL, envia payload básico
+              console.warn("Tentando envio com colunas básicas no Supabase...", errPost.message);
+              const basicRow = {
+                customer_name: reservation.name,
+                customer_whatsapp: reservation.whatsapp,
+                items: reservation.items,
+                total: reservation.total,
+                gift_wrap: reservation.giftWrap,
+                packages: reservation.packages,
+              };
+              const rows = await supabaseRest("reservations", {
+                method: "POST",
+                body: [basicRow],
+              });
+              if (rows && rows[0]) {
+                reservation.id = String(rows[0].id);
+              }
             }
           }
         } catch (err) {
@@ -1889,7 +1921,7 @@
 
           <main className="max-w-md mx-auto w-full p-6 my-auto">
             <p className="text-sm text-brand-textMuted mb-6 leading-relaxed">
-              Informe seu nome e WhatsApp para que nossa equipe separe suas fragrâncias e envie a confirmação de retirada.
+              Informe seu nome e WhatsApp para identificação da sua reserva na loja. O pedido é enviado diretamente para nosso sistema para separação.
             </p>
 
             <div className="space-y-4 mb-6">
@@ -1977,94 +2009,81 @@
     }
 
     /* ==========================================================================
-       TELA DE CONFIRMAÇÃO COM DISPARO PARA WHATSAPP
+       TELA DE CONFIRMAÇÃO DA RESERVA
     ========================================================================== */
     function ConfirmationScreen({ reservation, onHome }) {
-      // Gera texto pré-formatado para o WhatsApp da loja
-      const generateWhatsAppUrl = () => {
-        let text = `🕯️ *NOVA RESERVA — CASA VELLUMINE*\n`;
-        text += `Código: #${reservation.id.slice(-6).toUpperCase()}\n`;
-        text += `Cliente: *${reservation.name}*\n`;
-        text += `WhatsApp: ${reservation.whatsapp}\n\n`;
-        text += `*ITENS RESERVADOS:*\n`;
-        reservation.items.forEach((it) => {
-          text += `• ${it.qty}x ${it.name} ${it.size ? `(${it.size})` : ""} — ${formatBRL(it.qty * it.price)}\n`;
-        });
-        text += `\n*Total:* ${formatBRL(reservation.total)}\n`;
-        text += `*Embalagem para presente:* ${reservation.giftWrap ? "Sim" : "Não"}\n`;
-
-        if (reservation.giftWrap && reservation.packages.length > 0) {
-          text += `\n*Organização das Caixas:*\n`;
-          reservation.packages.forEach((pkg, idx) => {
-            text += `  Caixa ${idx + 1}: ` + pkg.items.map((i) => `${i.qty}x ${i.name}`).join(", ") + `\n`;
-          });
-        }
-
-        if (reservation.notes) {
-          text += `\n*Observações:* ${reservation.notes}\n`;
-        }
-        text += `\nOlá! Acabei de fazer essa reserva no site e gostaria de confirmar a retirada.`;
-
-        return `https://wa.me/${WHATSAPP_STORE_PHONE}?text=${encodeURIComponent(text)}`;
-      };
-
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-          <div className="max-w-md w-full bg-brand-surface border border-brand-border rounded-xl p-8 shadow-2xl">
-            <div className="w-16 h-16 bg-brand-accent/20 border border-brand-accent text-brand-accent rounded-full flex items-center justify-center mx-auto mb-5">
+        <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+          <div className="max-w-md w-full bg-brand-surface border border-brand-border rounded-xl p-6 sm:p-8 shadow-2xl animate-fade-in">
+            <div className="w-16 h-16 bg-brand-accent/20 border border-brand-accent text-brand-accent rounded-full flex items-center justify-center mx-auto mb-4">
               <Icon name="check" size={32} />
             </div>
 
             <span className="text-xs uppercase tracking-widest text-brand-accent font-semibold block mb-1">
-              Reserva Registrada
+              Reserva Confirmada com Sucesso
             </span>
             <h2 className="font-serif text-3xl text-brand-text mb-2">Muito Obrigado!</h2>
             <p className="text-sm text-brand-textMuted mb-6 leading-relaxed">
-              Sua reserva foi registrada para <strong>{reservation.name}</strong>.
+              Sua reserva foi registrada diretamente em nosso sistema para <strong>{reservation.name}</strong>. Nossa equipe já tem acesso ao seu pedido e cuidará da separação.
             </p>
 
             {/* Código da Reserva */}
-            <div className="bg-brand-surface2 border border-brand-border rounded p-3 mb-6 flex justify-between items-center text-sm">
-              <span className="text-brand-textMuted">Código da Reserva:</span>
-              <span className="font-mono font-bold text-brand-accent">
-                #{reservation.id.slice(-6).toUpperCase()}
+            <div className="bg-brand-surface2 border border-brand-border rounded-lg p-3.5 mb-6 flex justify-between items-center text-sm">
+              <div className="text-left">
+                <span className="text-[11px] text-brand-muted block uppercase tracking-wider">Código da Reserva</span>
+                <span className="font-mono text-base sm:text-lg font-bold text-brand-accent">
+                  #{reservation.id.slice(-6).toUpperCase()}
+                </span>
+              </div>
+              <span className="text-xs bg-brand-surface border border-brand-border text-brand-textMuted px-2.5 py-1 rounded-full">
+                Guarde este código
               </span>
             </div>
 
             {/* Detalhes dos Itens */}
             <div className="text-left divide-y divide-brand-border/60 border-y border-brand-border/60 mb-6 text-xs sm:text-sm">
               {reservation.items.map((it, idx) => (
-                <div key={idx} className="py-2.5 flex justify-between">
-                  <span className="text-brand-text">
-                    {it.qty}x {it.name}
-                  </span>
-                  <span className="text-brand-textMuted font-medium">
+                <div key={idx} className="py-2.5 flex justify-between items-center">
+                  <div className="pr-2">
+                    <span className="text-brand-text font-medium">
+                      {it.qty}x {it.name}
+                    </span>
+                    {it.size && <span className="text-brand-muted text-xs block">{it.size}</span>}
+                  </div>
+                  <span className="text-brand-textMuted font-medium whitespace-nowrap">
                     {formatBRL(it.qty * it.price)}
                   </span>
                 </div>
               ))}
+
+              {reservation.giftWrap && (
+                <div className="py-2 text-brand-accent text-xs flex items-center gap-1.5">
+                  <Icon name="gift" size={14} />
+                  <span>Embalagem para presente inclusa ({reservation.packages?.length || 1} caixa(s))</span>
+                </div>
+              )}
+
               <div className="py-3 flex justify-between font-bold text-brand-text text-base">
-                <span>Total</span>
-                <span className="text-brand-accent font-serif">{formatBRL(reservation.total)}</span>
+                <span>Total a pagar na retirada</span>
+                <span className="text-brand-accent font-serif text-lg">{formatBRL(reservation.total)}</span>
               </div>
             </div>
 
-            {/* Botão de Envio para WhatsApp da Loja */}
-            <a
-              href={generateWhatsAppUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3.5 rounded text-sm transition-all shadow-lg flex items-center justify-center gap-2 mb-3"
-            >
-              <Icon name="phone" size={18} />
-              <span>Enviar Pedido no WhatsApp da Loja</span>
-            </a>
+            {/* Informações para o Cliente */}
+            <div className="bg-brand-surface2/60 border border-brand-border rounded-lg p-3.5 mb-6 text-left text-xs text-brand-textMuted space-y-1.5">
+              <div className="font-semibold text-brand-text flex items-center gap-1.5 text-xs mb-1">
+                <span>📍</span> Informações de Retirada:
+              </div>
+              <p>• Suas fragrâncias ficam reservadas com exclusividade para você.</p>
+              <p>• Ao comparecer à loja, basta informar seu nome ou o código <strong>#{reservation.id.slice(-6).toUpperCase()}</strong>.</p>
+              <p>• O pagamento é realizado diretamente no momento da retirada.</p>
+            </div>
 
             <button
               onClick={onHome}
-              className="w-full bg-transparent border border-brand-border hover:border-brand-muted text-brand-text py-3 rounded text-sm transition-colors"
+              className="w-full bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-3.5 rounded text-sm transition-all shadow-lg flex items-center justify-center gap-2"
             >
-              Voltar à Página Inicial
+              <span>Voltar à Página Inicial</span>
             </button>
           </div>
         </div>

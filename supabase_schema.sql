@@ -53,7 +53,12 @@ CREATE TABLE IF NOT EXISTS public.reservations (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Índice para ordenação das reservas por data
+-- Garante que colunas adicionais existam caso a tabela já tenha sido criada anteriormente
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pendente';
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now());
+
+-- Índice para ordenação das reservas por data e status
 CREATE INDEX IF NOT EXISTS idx_reservations_created_at ON public.reservations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reservations_status ON public.reservations(status);
 
@@ -88,12 +93,15 @@ ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
 
 -- CATEGORIAS:
+DROP POLICY IF EXISTS "Categorias visíveis para todos" ON public.categories;
+DROP POLICY IF EXISTS "Apenas admin pode gerenciar categorias" ON public.categories;
+
 -- Leitura pública para qualquer visitante
 CREATE POLICY "Categorias visíveis para todos" 
     ON public.categories FOR SELECT 
     USING (true);
 
--- Modificações permitidas apenas para usuários autenticados (administradores)
+-- Modificações permitidas apenas para administradores autenticados
 CREATE POLICY "Apenas admin pode gerenciar categorias" 
     ON public.categories FOR ALL 
     TO authenticated 
@@ -101,6 +109,9 @@ CREATE POLICY "Apenas admin pode gerenciar categorias"
     WITH CHECK (true);
 
 -- PRODUTOS:
+DROP POLICY IF EXISTS "Visitantes podem ver produtos ativos" ON public.products;
+DROP POLICY IF EXISTS "Apenas admin pode gerenciar produtos" ON public.products;
+
 -- Visitantes anônimos podem visualizar apenas produtos ativos
 CREATE POLICY "Visitantes podem ver produtos ativos" 
     ON public.products FOR SELECT 
@@ -114,12 +125,20 @@ CREATE POLICY "Apenas admin pode gerenciar produtos"
     WITH CHECK (true);
 
 -- RESERVAS:
+DROP POLICY IF EXISTS "Clientes podem criar reservas" ON public.reservations;
+DROP POLICY IF EXISTS "Enable insert for all users" ON public.reservations;
+DROP POLICY IF EXISTS "Apenas admin pode consultar e gerenciar reservas" ON public.reservations;
+DROP POLICY IF EXISTS "Apenas admin pode atualizar status de reservas" ON public.reservations;
+DROP POLICY IF EXISTS "Apenas admin pode excluir reservas" ON public.reservations;
+DROP POLICY IF EXISTS "Permitir leitura publica" ON public.reservations;
+
 -- Qualquer cliente (público / anônimo) pode enviar (INSERT) uma nova reserva
 CREATE POLICY "Clientes podem criar reservas" 
     ON public.reservations FOR INSERT 
+    TO public
     WITH CHECK (true);
 
--- Apenas o administrador autenticado pode listar, ler e atualizar o status das reservas
+-- Apenas o administrador autenticado pode listar, ler e gerenciar as reservas
 CREATE POLICY "Apenas admin pode consultar e gerenciar reservas" 
     ON public.reservations FOR SELECT 
     TO authenticated 
