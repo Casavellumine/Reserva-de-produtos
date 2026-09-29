@@ -6,13 +6,17 @@
 export const SUPABASE_URL = "https://xecslcroytlzovcokkgx.supabase.co";
 export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_8tWFYHqTpDvLZhavsYA5VA_9hAyRkJ6";
 
-export async function supabaseRest(path, { method = "GET", body, accessToken } = {}) {
+export async function supabaseRest(path, { method = "GET", body, accessToken, prefer } = {}) {
   const headers = {
     apikey: SUPABASE_PUBLISHABLE_KEY,
     Authorization: `Bearer ${accessToken || SUPABASE_PUBLISHABLE_KEY}`,
     "Content-Type": "application/json",
   };
-  if (method !== "GET") headers["Prefer"] = "return=representation";
+  if (prefer) {
+    headers["Prefer"] = prefer;
+  } else if (method !== "GET") {
+    headers["Prefer"] = "return=representation";
+  }
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method,

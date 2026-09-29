@@ -305,7 +305,7 @@
       localStorage.setItem(STORAGE_KEYS.USE_LOCAL, cfg.useLocal ? "true" : "false");
     }
 
-    async function supabaseRest(path, { method = "GET", body, accessToken } = {}) {
+    async function supabaseRest(path, { method = "GET", body, accessToken, prefer } = {}) {
       const cfg = getSupabaseConfig();
       if (cfg.useLocal) {
         throw new Error("Modo local ativo.");
@@ -316,7 +316,11 @@
         Authorization: `Bearer ${accessToken || cfg.key}`,
         "Content-Type": "application/json",
       };
-      if (method !== "GET") headers["Prefer"] = "return=representation";
+      if (prefer) {
+        headers["Prefer"] = prefer;
+      } else if (method !== "GET") {
+        headers["Prefer"] = "return=representation";
+      }
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
@@ -774,13 +778,11 @@
           const cfg = getSupabaseConfig();
           if (!cfg.useLocal && !isUsingLocalData) {
             try {
-              const rows = await supabaseRest("reservations", {
+              await supabaseRest("reservations", {
                 method: "POST",
                 body: [reservationToDb(reservation)],
+                prefer: "return=minimal",
               });
-              if (rows && rows[0]) {
-                reservation.id = String(rows[0].id);
-              }
             } catch (errPost) {
               // Se falhou por colunas ausentes antes da execução do script SQL, envia payload básico
               console.warn("Tentando envio com colunas básicas no Supabase...", errPost.message);
@@ -792,13 +794,11 @@
                 gift_wrap: reservation.giftWrap,
                 packages: reservation.packages,
               };
-              const rows = await supabaseRest("reservations", {
+              await supabaseRest("reservations", {
                 method: "POST",
                 body: [basicRow],
+                prefer: "return=minimal",
               });
-              if (rows && rows[0]) {
-                reservation.id = String(rows[0].id);
-              }
             }
           }
         } catch (err) {
