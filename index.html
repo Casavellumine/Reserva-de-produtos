@@ -2040,7 +2040,9 @@
               <div className="flex justify-between text-brand-textMuted mb-2">
                 <span>Embalagem para presente:</span>
                 <span className="text-brand-text font-medium">
-                  {giftWrap ? `Sim (${packagesCount} caixas)` : "Não (padrão)"}
+                  {giftWrap
+                    ? `Sim (${packagesCount} ${packagesCount === 1 ? "caixa" : "caixas"})`
+                    : "Não (padrão)"}
                 </span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-brand-border text-base">
@@ -2125,7 +2127,9 @@
               {reservation.giftWrap && (
                 <div className="py-2 text-brand-accent text-xs flex items-center gap-1.5">
                   <Icon name="gift" size={14} />
-                  <span>Embalagem para presente inclusa ({reservation.packages?.length || 1} caixa(s))</span>
+                  <span>
+                    Embalagem para presente inclusa ({(reservation.packages?.length || 1)} {(reservation.packages?.length || 1) === 1 ? "caixa" : "caixas"})
+                  </span>
                 </div>
               )}
 
