@@ -42,3 +42,16 @@ export async function supabaseSignIn(email, password) {
   }
   return data;
 }
+
+export async function supabaseRefreshToken(refreshToken) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error_description || data.msg || "Sessão expirada.");
+  }
+  return data;
+}

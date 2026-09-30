@@ -369,6 +369,26 @@
       return data;
     }
 
+    async function supabaseRefreshToken(refreshToken) {
+      const cfg = getSupabaseConfig();
+      if (cfg.useLocal || !refreshToken) return null;
+      try {
+        const res = await fetch(`${cfg.url}/auth/v1/token?grant_type=refresh_token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: cfg.key },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error_description || data.msg || "Sessão expirada.");
+        }
+        return data;
+      } catch (e) {
+        console.warn("Falha ao renovar token de sessão:", e.message);
+        return null;
+      }
+    }
+
     // Mapeamento de entidades
     function dbToProduct(row) {
       return {
@@ -586,29 +606,66 @@
       // Restaura sessão do Administrador e suporta link direto #admin
       useEffect(() => {
         loadCatalog();
-        let currentSession = null;
-        try {
-          const savedSession = localStorage.getItem(STORAGE_KEYS.SESSION);
-          if (savedSession) {
-            const parsed = JSON.parse(savedSession);
-            if (parsed.expires_at && parsed.expires_at * 1000 > Date.now()) {
-              currentSession = parsed;
-              setSession(parsed);
+
+        async function restoreAdminSession() {
+          let currentSession = null;
+          try {
+            const rawSession =
+              localStorage.getItem(STORAGE_KEYS.SESSION) ||
+              sessionStorage.getItem(STORAGE_KEYS.SESSION);
+
+            if (rawSession) {
+              const parsed = JSON.parse(rawSession);
+              // Caso 1: Token ainda válido
+              if (parsed.expires_at && parsed.expires_at * 1000 > Date.now()) {
+                currentSession = parsed;
+                setSession(parsed);
+              } 
+              // Caso 2: Token expirado, mas tem refresh_token -> Renova silenciosamente
+              else if (parsed.refresh_token) {
+                try {
+                  const refreshed = await supabaseRefreshToken(parsed.refresh_token);
+                  if (refreshed && refreshed.access_token) {
+                    currentSession = {
+                      access_token: refreshed.access_token,
+                      refresh_token: refreshed.refresh_token || parsed.refresh_token,
+                      expires_at: refreshed.expires_at || Math.floor(Date.now() / 1000) + 3600,
+                      user: refreshed.user || parsed.user,
+                      rememberMe: parsed.rememberMe !== false,
+                    };
+                    setSession(currentSession);
+                    if (currentSession.rememberMe) {
+                      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(currentSession));
+                    } else {
+                      sessionStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(currentSession));
+                    }
+                  } else {
+                    localStorage.removeItem(STORAGE_KEYS.SESSION);
+                    sessionStorage.removeItem(STORAGE_KEYS.SESSION);
+                  }
+                } catch (refErr) {
+                  localStorage.removeItem(STORAGE_KEYS.SESSION);
+                  sessionStorage.removeItem(STORAGE_KEYS.SESSION);
+                }
+              } else {
+                localStorage.removeItem(STORAGE_KEYS.SESSION);
+                sessionStorage.removeItem(STORAGE_KEYS.SESSION);
+              }
+            }
+          } catch (e) {}
+
+          const hash = window.location.hash.toLowerCase();
+          const search = window.location.search.toLowerCase();
+          if (hash === "#admin" || search.includes("admin")) {
+            if (currentSession) {
+              setView("admin");
             } else {
-              localStorage.removeItem(STORAGE_KEYS.SESSION);
+              setView("adminLogin");
             }
           }
-        } catch (e) {}
-
-        const hash = window.location.hash.toLowerCase();
-        const search = window.location.search.toLowerCase();
-        if (hash === "#admin" || search.includes("admin")) {
-          if (currentSession) {
-            setView("admin");
-          } else {
-            setView("adminLogin");
-          }
         }
+
+        restoreAdminSession();
       }, []);
 
       // Carrega reservas quando autenticado como admin
@@ -1137,9 +1194,16 @@
           {/* FLUXO DO ADMINISTRADOR */}
           {view === "adminLogin" && !session && (
             <AdminLoginScreen
-              onSuccess={(userSession) => {
+              onSuccess={(userSession, rememberMe = true) => {
                 setSession(userSession);
-                localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(userSession));
+                userSession.rememberMe = rememberMe;
+                if (rememberMe) {
+                  localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(userSession));
+                  sessionStorage.removeItem(STORAGE_KEYS.SESSION);
+                } else {
+                  sessionStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(userSession));
+                  localStorage.removeItem(STORAGE_KEYS.SESSION);
+                }
                 setView("admin");
                 addToast("Login realizado com sucesso!", "success");
               }}
@@ -1149,6 +1213,7 @@
                   access_token: "demo_token_" + Date.now(),
                   user: { email: "admin@casavellumine.com" },
                   expires_at: Math.floor(Date.now() / 1000) + 86400,
+                  rememberMe: true,
                 };
                 setSession(demoSession);
                 localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(demoSession));
@@ -1212,6 +1277,7 @@
               onLogout={() => {
                 setSession(null);
                 localStorage.removeItem(STORAGE_KEYS.SESSION);
+                sessionStorage.removeItem(STORAGE_KEYS.SESSION);
                 setView("home");
                 addToast("Sessão encerrada.", "info");
               }}
@@ -2096,6 +2162,7 @@
     function AdminLoginScreen({ onSuccess, onBack, onUseDemo }) {
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
+      const [rememberMe, setRememberMe] = useState(true);
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState("");
 
@@ -2105,12 +2172,16 @@
         setLoading(true);
         try {
           const data = await supabaseSignIn(email.trim(), password);
-          onSuccess({
-            access_token: data.access_token,
-            refresh_token: data.refresh_token,
-            expires_at: data.expires_at,
-            user: data.user,
-          });
+          onSuccess(
+            {
+              access_token: data.access_token,
+              refresh_token: data.refresh_token,
+              expires_at: data.expires_at || Math.floor(Date.now() / 1000) + 3600,
+              user: data.user,
+              rememberMe: rememberMe,
+            },
+            rememberMe
+          );
         } catch (err) {
           setError(err.message || "E-mail ou senha incorretos.");
         } finally {
@@ -2166,10 +2237,23 @@
                 />
               </div>
 
+              {/* Opção Manter Conectado */}
+              <div className="flex items-center text-xs py-1">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none text-brand-textMuted hover:text-brand-text">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-brand-border bg-brand-surface2 accent-brand-accent cursor-pointer"
+                  />
+                  <span>Manter conectado neste aparelho</span>
+                </label>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-3 rounded text-sm transition-all"
+                className="w-full bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-3 rounded text-sm transition-all shadow-md"
               >
                 {loading ? "Entrando..." : "Entrar com Supabase"}
               </button>
