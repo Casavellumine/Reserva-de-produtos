@@ -98,10 +98,9 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     /* ==========================================================================
-       CONFIGURAÇÃO DO SUPABASE & CONSTANTES
+       CONFIGURAÇÃO DA API CLOUDFLARE D1 & CONSTANTES
     ========================================================================== */
-    const DEFAULT_SUPABASE_URL = "https://xecslcroytlzovcokkgx.supabase.co";
-    const DEFAULT_SUPABASE_KEY = "sb_publishable_8tWFYHqTpDvLZhavsYA5VA_9hAyRkJ6";
+    const API_BASE_URL = window.location.origin;
     const WHATSAPP_STORE_PHONE = "5511999999999"; // WhatsApp da Casa Vellumine para receber pedidos
 
     const STORAGE_KEYS = {
@@ -109,11 +108,10 @@
       CATEGORIES: "vellumine:categories_cache",
       RESERVATIONS: "vellumine:reservations",
       SESSION: "vellumine:admin_session",
-      CONFIG: "vellumine:supabase_config",
       USE_LOCAL: "vellumine:force_local_mode",
     };
 
-    // Dados semente iniciais para catálogo garantido (100% funcional mesmo sem Supabase criado)
+    // Dados semente iniciais para catálogo garantido (100% funcional mesmo sem conexão com o banco)
     const SEED_CATEGORIES = ["Vela Aromática", "Home Spray", "Difusor de Varetas", "Wax Melts"];
 
     const SEED_PRODUCTS = [
@@ -286,47 +284,33 @@
     }
 
     /* ==========================================================================
-       CAMADA DE API / SUPABASE COM FALLBACK INTELIGENTE (MODO HÍBRIDO)
+       CAMADA DE API / CLOUDFLARE D1 COM FALLBACK INTELIGENTE (MODO HÍBRIDO)
     ========================================================================== */
-    function getSupabaseConfig() {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
-        if (saved) return JSON.parse(saved);
-      } catch (e) {}
+    function getApiConfig() {
       return {
-        url: DEFAULT_SUPABASE_URL,
-        key: DEFAULT_SUPABASE_KEY,
         useLocal: localStorage.getItem(STORAGE_KEYS.USE_LOCAL) === "true",
       };
     }
 
-    function saveSupabaseConfig(cfg) {
-      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(cfg));
-      localStorage.setItem(STORAGE_KEYS.USE_LOCAL, cfg.useLocal ? "true" : "false");
-    }
-
-    async function supabaseRest(path, { method = "GET", body, accessToken, prefer } = {}) {
-      const cfg = getSupabaseConfig();
+    async function apiFetch(path, { method = "GET", body, accessToken } = {}) {
+      const cfg = getApiConfig();
       if (cfg.useLocal) {
         throw new Error("Modo local ativo.");
       }
 
       const headers = {
-        apikey: cfg.key,
-        Authorization: `Bearer ${accessToken || cfg.key}`,
         "Content-Type": "application/json",
       };
-      if (prefer) {
-        headers["Prefer"] = prefer;
-      } else if (method !== "GET") {
-        headers["Prefer"] = "return=representation";
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       try {
-        const res = await fetch(`${cfg.url}/rest/v1/${path}`, {
+        const cleanPath = path.startsWith("/") ? path : `/api/${path}`;
+        const res = await fetch(cleanPath, {
           method,
           headers,
           body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -335,7 +319,7 @@
         clearTimeout(timeoutId);
         const data = await res.json().catch(() => null);
         if (!res.ok) {
-          throw new Error((data && (data.message || data.error_description)) || "Erro de conexão com o banco de dados.");
+          throw new Error((data && (data.error || data.message)) || "Erro de conexão com o banco de dados.");
         }
         return data;
       } catch (err) {
@@ -344,49 +328,28 @@
       }
     }
 
-    async function supabaseSignIn(email, password) {
-      const cfg = getSupabaseConfig();
+    async function apiSignIn(email, password) {
+      const cfg = getApiConfig();
       if (cfg.useLocal) {
-        // Modo local: aceita qualquer email ou admin demo
         if (email && password) {
           return {
             access_token: "demo_token_" + Date.now(),
             user: { email: email },
-            expires_at: Math.floor(Date.now() / 1000) + 86400,
+            expires_at: Math.floor(Date.now() / 1000) + 86400 * 30,
           };
         }
       }
 
-      const res = await fetch(`${cfg.url}/auth/v1/token?grant_type=password`, {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: cfg.key },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error_description || data.msg || "E-mail ou senha incorretos.");
+        throw new Error(data.error || "E-mail ou senha incorretos.");
       }
       return data;
-    }
-
-    async function supabaseRefreshToken(refreshToken) {
-      const cfg = getSupabaseConfig();
-      if (cfg.useLocal || !refreshToken) return null;
-      try {
-        const res = await fetch(`${cfg.url}/auth/v1/token?grant_type=refresh_token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: cfg.key },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error_description || data.msg || "Sessão expirada.");
-        }
-        return data;
-      } catch (e) {
-        console.warn("Falha ao renovar token de sessão:", e.message);
-        return null;
-      }
     }
 
     // Mapeamento de entidades
@@ -548,7 +511,7 @@
       ------------------------------------------------------------- */
       async function loadCatalog() {
         setCatalogLoading(true);
-        const cfg = getSupabaseConfig();
+        const cfg = getApiConfig();
 
         if (cfg.useLocal) {
           useLocalCatalog();
@@ -558,8 +521,8 @@
 
         try {
           const [prodRows, catRows] = await Promise.all([
-            supabaseRest("products?select=*&order=created_at.asc"),
-            supabaseRest("categories?select=name&order=created_at.asc"),
+            apiFetch("products"),
+            apiFetch("categories"),
           ]);
           if (prodRows && prodRows.length > 0) {
             setProducts(prodRows.map(dbToProduct));
@@ -576,7 +539,7 @@
           }
           setIsUsingLocalData(false);
         } catch (err) {
-          console.warn("Supabase indisponível no momento, usando modo local/cache:", err.message);
+          console.warn("Cloudflare D1 indisponível no momento, usando modo local/cache:", err.message);
           useLocalCatalog();
           setIsUsingLocalData(true);
         } finally {
@@ -616,37 +579,9 @@
 
             if (rawSession) {
               const parsed = JSON.parse(rawSession);
-              // Caso 1: Token ainda válido
               if (parsed.expires_at && parsed.expires_at * 1000 > Date.now()) {
                 currentSession = parsed;
                 setSession(parsed);
-              } 
-              // Caso 2: Token expirado, mas tem refresh_token -> Renova silenciosamente
-              else if (parsed.refresh_token) {
-                try {
-                  const refreshed = await supabaseRefreshToken(parsed.refresh_token);
-                  if (refreshed && refreshed.access_token) {
-                    currentSession = {
-                      access_token: refreshed.access_token,
-                      refresh_token: refreshed.refresh_token || parsed.refresh_token,
-                      expires_at: refreshed.expires_at || Math.floor(Date.now() / 1000) + 3600,
-                      user: refreshed.user || parsed.user,
-                      rememberMe: parsed.rememberMe !== false,
-                    };
-                    setSession(currentSession);
-                    if (currentSession.rememberMe) {
-                      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(currentSession));
-                    } else {
-                      sessionStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(currentSession));
-                    }
-                  } else {
-                    localStorage.removeItem(STORAGE_KEYS.SESSION);
-                    sessionStorage.removeItem(STORAGE_KEYS.SESSION);
-                  }
-                } catch (refErr) {
-                  localStorage.removeItem(STORAGE_KEYS.SESSION);
-                  sessionStorage.removeItem(STORAGE_KEYS.SESSION);
-                }
               } else {
                 localStorage.removeItem(STORAGE_KEYS.SESSION);
                 sessionStorage.removeItem(STORAGE_KEYS.SESSION);
@@ -671,7 +606,7 @@
       // Carrega reservas quando autenticado como admin
       async function loadReservations() {
         setReservationsLoading(true);
-        const cfg = getSupabaseConfig();
+        const cfg = getApiConfig();
         if (cfg.useLocal || isUsingLocalData) {
           const localRes = localStorage.getItem(STORAGE_KEYS.RESERVATIONS);
           setReservations(localRes ? JSON.parse(localRes) : []);
@@ -680,12 +615,11 @@
         }
 
         try {
-          const rows = await supabaseRest("reservations?select=*&order=created_at.desc", {
+          const rows = await apiFetch("reservations", {
             accessToken: session?.access_token,
           });
           setReservations(rows.map(dbToReservation));
         } catch (err) {
-          // Fallback para reservas salvas no localStorage
           const localRes = localStorage.getItem(STORAGE_KEYS.RESERVATIONS);
           setReservations(localRes ? JSON.parse(localRes) : []);
         } finally {
@@ -832,31 +766,12 @@
         setConfirmLoading(true);
 
         try {
-          const cfg = getSupabaseConfig();
+          const cfg = getApiConfig();
           if (!cfg.useLocal && !isUsingLocalData) {
-            try {
-              await supabaseRest("reservations", {
-                method: "POST",
-                body: [reservationToDb(reservation)],
-                prefer: "return=minimal",
-              });
-            } catch (errPost) {
-              // Se falhou por colunas ausentes antes da execução do script SQL, envia payload básico
-              console.warn("Tentando envio com colunas básicas no Supabase...", errPost.message);
-              const basicRow = {
-                customer_name: reservation.name,
-                customer_whatsapp: reservation.whatsapp,
-                items: reservation.items,
-                total: reservation.total,
-                gift_wrap: reservation.giftWrap,
-                packages: reservation.packages,
-              };
-              await supabaseRest("reservations", {
-                method: "POST",
-                body: [basicRow],
-                prefer: "return=minimal",
-              });
-            }
+            await apiFetch("reservations", {
+              method: "POST",
+              body: reservationToDb(reservation),
+            });
           }
         } catch (err) {
           console.warn("Salvando reserva no armazenamento local:", err.message);
@@ -911,7 +826,7 @@
               prev.map((p) => (p.id === editingProduct.id ? { ...toSave, id: editingProduct.id } : p))
             );
             if (!isUsingLocalData) {
-              await supabaseRest(`products?id=eq.${editingProduct.id}`, {
+              await apiFetch(`products/${editingProduct.id}`, {
                 method: "PATCH",
                 body: productToDb(toSave),
                 accessToken: session?.access_token,
@@ -923,9 +838,9 @@
             const newProd = { ...toSave, id: uid() };
             setProducts((prev) => [newProd, ...prev]);
             if (!isUsingLocalData) {
-              const rows = await supabaseRest("products", {
+              const rows = await apiFetch("products", {
                 method: "POST",
-                body: [productToDb(toSave)],
+                body: productToDb(toSave),
                 accessToken: session?.access_token,
               });
               if (rows && rows[0]) {
@@ -956,7 +871,7 @@
         );
         try {
           if (!isUsingLocalData) {
-            await supabaseRest(`products?id=eq.${id}`, {
+            await apiFetch(`products/${id}`, {
               method: "DELETE",
               accessToken: session?.access_token,
             });
@@ -979,7 +894,7 @@
 
         try {
           if (!isUsingLocalData) {
-            await supabaseRest(`products?id=eq.${id}`, {
+            await apiFetch(`products/${id}`, {
               method: "PATCH",
               body: { active: nextActive },
               accessToken: session?.access_token,
@@ -1001,7 +916,7 @@
 
         try {
           if (!isUsingLocalData) {
-            await supabaseRest(`reservations?id=eq.${id}`, {
+            await apiFetch(`reservations/${id}`, {
               method: "PATCH",
               body: { status: newStatus },
               accessToken: session?.access_token,
@@ -1016,6 +931,13 @@
         const updated = [...categories, cat];
         setCategories(updated);
         localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(updated));
+        if (!isUsingLocalData) {
+          apiFetch("categories", {
+            method: "POST",
+            body: { name: cat },
+            accessToken: session?.access_token,
+          }).catch(() => {});
+        }
         setProductDraft((d) => ({ ...d, category: cat }));
         setNewCategoryInput("");
         addToast(`Categoria "${cat}" criada.`, "success");
@@ -2175,12 +2097,11 @@
         setError("");
         setLoading(true);
         try {
-          const data = await supabaseSignIn(email.trim(), password);
+          const data = await apiSignIn(email.trim(), password);
           onSuccess(
             {
               access_token: data.access_token,
-              refresh_token: data.refresh_token,
-              expires_at: data.expires_at || Math.floor(Date.now() / 1000) + 3600,
+              expires_at: data.expires_at || Math.floor(Date.now() / 1000) + 86400 * 30,
               user: data.user,
               rememberMe: rememberMe,
             },
@@ -2202,7 +2123,7 @@
               </div>
               <h2 className="font-serif text-2xl text-brand-text">Acesso do Lojista</h2>
               <p className="text-xs text-brand-textMuted mt-1">
-                Autenticação via Supabase Auth
+                Autenticação Casa Vellumine
               </p>
             </div>
 
@@ -2259,7 +2180,7 @@
                 disabled={loading}
                 className="w-full bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-3 rounded text-sm transition-all shadow-md"
               >
-                {loading ? "Entrando..." : "Entrar com Supabase"}
+                {loading ? "Entrando..." : "Entrar no Painel"}
               </button>
             </form>
 
@@ -2331,9 +2252,6 @@
       setIsUsingLocalData,
       addToast,
     }) {
-      const [configUrl, setConfigUrl] = useState(() => getSupabaseConfig().url);
-      const [configKey, setConfigKey] = useState(() => getSupabaseConfig().key);
-
       // Filtragem das reservas
       const filteredReservations = useMemo(() => {
         return reservations.filter((r) => {
@@ -2345,16 +2263,6 @@
           return matchStatus && matchSearch;
         });
       }, [reservations, statusFilter, adminSearch]);
-
-      const handleSaveConfig = (e) => {
-        e.preventDefault();
-        saveSupabaseConfig({
-          url: configUrl.trim(),
-          key: configKey.trim(),
-          useLocal: isUsingLocalData,
-        });
-        addToast("Configurações do Supabase salvas!", "success");
-      };
 
       return (
         <div className="min-h-screen flex flex-col bg-brand-bg">
@@ -2379,7 +2287,7 @@
                       isUsingLocalData ? "bg-amber-400" : "bg-emerald-400"
                     }`}
                   />
-                  <span>{isUsingLocalData ? "Modo Local" : "Supabase Conectado"}</span>
+                  <span>{isUsingLocalData ? "Modo Local" : "Cloudflare D1 Conectado"}</span>
                 </div>
               </div>
             </div>
@@ -3092,16 +3000,39 @@
               </div>
             )}
 
-            {/* 5. ABA CONFIGURAÇÕES & SUPABASE */}
+            {/* 5. ABA CONFIGURAÇÕES & CLOUDFLARE D1 */}
             {adminTab === "settings" && (
               <div className="max-w-xl mx-auto bg-brand-surface border border-brand-border rounded-lg p-6 sm:p-8 space-y-6 animate-fade-in">
                 <div>
                   <h3 className="font-serif text-2xl text-brand-text">
-                    Configurações do Supabase
+                    Banco de Dados Cloudflare D1
                   </h3>
                   <p className="text-xs text-brand-textMuted mt-1">
-                    Conecte seu projeto do Supabase para persistir produtos e reservas na nuvem.
+                    Persistência nativa em nuvem Cloudflare, sem risco de pausa por inatividade e 100% gratuita.
                   </p>
+                </div>
+
+                {/* Status da Conexão */}
+                <div className="bg-brand-surface2 border border-brand-border rounded p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-semibold text-brand-text block">
+                        Status do Banco D1
+                      </span>
+                      <span className="text-xs text-brand-textMuted">
+                        Banco <code>vellumine-db</code> conectado diretamente aos Workers.
+                      </span>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      Ativo & Perpétuo
+                    </span>
+                  </div>
+
+                  <div className="pt-2 border-t border-brand-border/60 text-xs text-brand-textMuted space-y-1">
+                    <div><strong>Database ID:</strong> <code className="text-brand-accent">38698442-91c2-44a4-a577-cee0db48d212</code></div>
+                    <div><strong>Disponibilidade:</strong> Sem expiração por inatividade (nunca pausa).</div>
+                  </div>
                 </div>
 
                 {/* Alternador de Modo */}
@@ -3111,7 +3042,7 @@
                       Modo Local (Offline / Demo)
                     </span>
                     <span className="text-xs text-brand-textMuted">
-                      Salva catálogo e pedidos no armazenamento deste navegador sem exigir banco de dados.
+                      Salva catálogo e pedidos temporariamente apenas neste navegador.
                     </span>
                   </div>
                   <input
@@ -3124,61 +3055,13 @@
                         e.target.checked ? "true" : "false"
                       );
                       addToast(
-                        e.target.checked ? "Modo Local ativado." : "Modo Supabase ativado.",
+                        e.target.checked ? "Modo Local ativado." : "Modo Cloudflare D1 ativado.",
                         "info"
                       );
                     }}
                     className="w-5 h-5 accent-brand-accent cursor-pointer"
                   />
                 </div>
-
-                <form onSubmit={handleSaveConfig} className="space-y-4">
-                  <div>
-                    <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
-                      Supabase Project URL
-                    </label>
-                    <input
-                      type="url"
-                      value={configUrl}
-                      onChange={(e) => setConfigUrl(e.target.value)}
-                      placeholder="https://seu-projeto.supabase.co"
-                      className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs uppercase tracking-wider text-brand-textMuted mb-1">
-                      Supabase Anon / Publishable Key
-                    </label>
-                    <input
-                      type="text"
-                      value={configKey}
-                      onChange={(e) => setConfigKey(e.target.value)}
-                      placeholder="sb_publishable_..."
-                      className="w-full bg-brand-surface2 border border-brand-border rounded px-3.5 py-2 text-sm text-brand-text focus:border-brand-accent outline-none font-mono text-xs"
-                    />
-                  </div>
-
-                  <div className="pt-2 flex gap-3">
-                    <button
-                      type="submit"
-                      className="flex-1 bg-brand-accent hover:bg-brand-accentHover text-brand-onAccent font-semibold py-2.5 rounded text-xs transition-colors"
-                    >
-                      Salvar Conexão
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConfigUrl(DEFAULT_SUPABASE_URL);
-                        setConfigKey(DEFAULT_SUPABASE_KEY);
-                        addToast("Valores restaurados para o padrão.", "info");
-                      }}
-                      className="px-4 py-2.5 border border-brand-border text-brand-textMuted hover:text-white rounded text-xs"
-                    >
-                      Restaurar Padrão
-                    </button>
-                  </div>
-                </form>
 
                 {/* Reset de Dados Locais */}
                 <div className="pt-6 border-t border-brand-border/60">
@@ -3188,7 +3071,7 @@
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm("Deseja recarregar o catálogo padrão de demonstração?")) {
+                      if (confirm("Deseja limpar os caches locais deste dispositivo e sincronizar com o Cloudflare D1?")) {
                         localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
                         localStorage.removeItem(STORAGE_KEYS.CATEGORIES);
                         location.reload();
@@ -3196,7 +3079,7 @@
                     }}
                     className="text-xs text-brand-muted hover:text-red-400 underline"
                   >
-                    Restaurar catálogo inicial de demonstração
+                    Recarregar catálogo do servidor D1
                   </button>
                 </div>
               </div>
